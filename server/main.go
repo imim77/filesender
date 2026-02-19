@@ -4,29 +4,30 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/signal"
-	"sync"
-	"time"
 )
 
 func run(ctx context.Context, stdout, stderr io.Writer) error {
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 	defer cancel()
-	go func() {
-		fmt.Println("hiiii")
-	}()
-	var wg sync.WaitGroup
-	go func() {
-		defer wg.Done()
-		<-ctx.Done()
+	cfg := Config{
+		Host: "",
+		Port: "9000",
+	}
 
-		shutdownCtx := context.Background()
-		shutdownCtx, cancel := context.WithTimeout(shutdownCtx, 10*time.Second)
-		defer cancel()
+	srv, err := NewServer(&cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create server: %w", err)
+	}
+	fmt.Fprintf(stdout, "Signaling server starting on PORT :%s\n", cfg.Port)
+	go func() {
+		if err := srv.Start(); err != nil {
+			log.Printf("Server error: %v", err)
+		}
 	}()
-
-	wg.Wait()
+	<-ctx.Done()
 	return nil
 
 }
