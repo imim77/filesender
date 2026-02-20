@@ -17,6 +17,11 @@ const (
 	writeWait  = 10 * time.Second
 )
 
+type ErrorMessage struct {
+	Type string `json:"type"`
+	Code int    `json:"code"`
+}
+
 type Client struct {
 	ClientId  uuid.UUID
 	Conn      *websocket.Conn

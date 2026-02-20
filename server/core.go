@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"sync"
 
 	"github.com/google/uuid"
@@ -41,6 +42,20 @@ type WsClientMessage struct {
 type UpdateMessage struct {
 	Type string     `json:"type"`
 	Peer ClientInfo `json:"peer"`
+}
+
+type WsServerSdpMessage struct {
+	Type      string     `json:"type"`
+	Peer      ClientInfo `json:"peer"`
+	SessionID string     `json:"sessionId"`
+	SDP       string     `json:"sdp"`
+}
+
+type WsServerCandidateMessage struct {
+	Type      string          `json:"type"`
+	Peer      ClientInfo      `json:"peer"`
+	SessionID string          `json:"sessionId"`
+	Candidate json.RawMessage `json:"candidate"`
 }
 
 // pretty ugly tbh
@@ -105,6 +120,8 @@ func (c *Core) run() {
 				c.handleRegister(m)
 			case unregisterMsg:
 				c.handleUnregister(m)
+			case routeMsg:
+				m.Response <- c.handleRoute(m.ClientId, m.Message)
 			}
 
 		}
@@ -165,9 +182,12 @@ func (c *Core) handleRoute(clientId uuid.UUID, msg WsClientMessage) error {
 	switch msg.Type {
 	case "UPDATE":
 		return c.handleUpdate(clientId, msg)
+	case "OFFER", "ANSWER", "CANDIDATE":
+		return c.handleSignaling(clientId, msg)
 	default:
 		return fmt.Errorf("unknown message type: %s", msg.Type)
 	}
+
 }
 
 func (c *Core) handleUpdate(clientId uuid.UUID, msg WsClientMessage) error {
@@ -195,6 +215,51 @@ func (c *Core) handleUpdate(clientId uuid.UUID, msg WsClientMessage) error {
 	return nil
 }
 
+func (c *Core) handleSignaling(clientId uuid.UUID, msg WsClientMessage) error {
+	cli, err := c.getClient(clientId)
+	if err != nil {
+		return err
+	}
+	if msg.Target == "" || msg.SessionID == "" {
+		return cli.SendJSON(ErrorMessage{Type: "ERROR", Code: http.StatusBadRequest})
+	}
+
+	targetId, err := uuid.Parse(msg.Target)
+	if err != nil {
+		return err
+	}
+
+	var payload any
+	switch msg.Type {
+	case "OFFER", "ANSWER":
+		if msg.SDP == "" {
+			return cli.SendJSON(ErrorMessage{Type: "ERROR", Code: http.StatusBadRequest})
+		}
+		payload = WsServerSdpMessage{
+			Type:      msg.Type,
+			Peer:      cli.GetPublicInfo(),
+			SessionID: msg.SessionID,
+			SDP:       msg.SDP,
+		}
+	case "CANDIDATE":
+		if len(msg.Candidate) == 0 {
+			return cli.SendJSON(ErrorMessage{Type: "ERROR", Code: http.StatusBadRequest})
+		}
+		payload = WsServerCandidateMessage{
+			Type:      msg.Type,
+			Peer:      cli.GetPublicInfo(),
+			SessionID: msg.SessionID,
+			Candidate: msg.Candidate,
+		}
+	}
+	if err := c.forward(targetId, payload); err != nil {
+		return cli.SendJSON(ErrorMessage{Type: "ERROR", Code: http.StatusNotFound})
+	}
+	log.Printf("[SENDING PEER][%s] -> [RECIEVING PEER][%s] %s", clientId, msg.Target, msg.Type)
+	return nil
+
+}
+
 func (c *Core) getClient(clientId uuid.UUID) (*Client, error) {
 	client, ok := c.clients[clientId]
 	if !ok {
@@ -212,4 +277,17 @@ func (c *Core) getOthers(excludeId uuid.UUID) []*Client {
 		others = append(others, client)
 	}
 	return others
+}
+
+func (c *Core) forward(recieverPeer uuid.UUID, payload any) error {
+	target, err := c.getClient(recieverPeer)
+	if err != nil {
+		return err
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal error")
+	}
+	return target.Send(data)
 }
