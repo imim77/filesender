@@ -44,6 +44,11 @@ type UpdateMessage struct {
 	Peer ClientInfo `json:"peer"`
 }
 
+type LeftMessage struct {
+	Type   string `json:"type"`
+	PeerID string `json:"peerId"`
+}
+
 type WsServerSdpMessage struct {
 	Type      string     `json:"type"`
 	Peer      ClientInfo `json:"peer"`
@@ -174,6 +179,16 @@ func (c *Core) handleUnregister(msg unregisterMsg) {
 	if !ok {
 		return
 	}
+
+	leftData, err := json.Marshal(LeftMessage{Type: "LEFT", PeerID: msg.ClientID.String()})
+	if err == nil {
+		for _, peer := range c.getOthers(msg.ClientID) {
+			if sendErr := peer.Send(leftData); sendErr != nil {
+				log.Printf("[%s] failed to send LEFT to %s: %v", msg.ClientID, peer.ClientId, sendErr)
+			}
+		}
+	}
+
 	cli.CloseCon()
 	delete(c.clients, msg.ClientID)
 }
@@ -269,7 +284,7 @@ func (c *Core) getClient(clientId uuid.UUID) (*Client, error) {
 }
 
 func (c *Core) getOthers(excludeId uuid.UUID) []*Client {
-	others := make([]*Client, len(c.clients))
+	others := make([]*Client, 0, len(c.clients))
 	for id, client := range c.clients {
 		if id == excludeId {
 			continue
@@ -290,4 +305,17 @@ func (c *Core) forward(recieverPeer uuid.UUID, payload any) error {
 		return fmt.Errorf("marshal error")
 	}
 	return target.Send(data)
+}
+
+func (c *Core) RouteMessage(clientId uuid.UUID, msg WsClientMessage) error {
+	resp := make(chan error, 1)
+	if err := c.Enqueue(routeMsg{ClientId: clientId, Message: msg, Response: resp}); err != nil {
+		return err
+	}
+	select {
+	case err := <-resp:
+		return err
+	case <-c.closed:
+		return ErrCoreClosed
+	}
 }

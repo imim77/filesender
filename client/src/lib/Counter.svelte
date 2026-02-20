@@ -13,6 +13,12 @@
       onOpen: () => {
         console.log('Connected to signaling server');
       },
+      onMessage: (msg) => {
+        console.log('WS message:', msg);
+      },
+      onClose: (e) => {
+        console.log('Signaling closed:', e.code, e.reason);
+      },
       onError: (e) => {
         console.error('Signaling error:', e);
       },

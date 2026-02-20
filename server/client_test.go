@@ -41,7 +41,7 @@ func TestCloseCon_Idempotent(t *testing.T) {
 	conn, cleanup := newTestWS(t)
 	defer cleanup()
 
-	client := NewClient(uuid.New(), conn)
+	client := NewClient(uuid.New(), conn, nil)
 
 	// Call CloseCon concurrently multiple times
 	var wg sync.WaitGroup
@@ -66,7 +66,7 @@ func TestWriteLoop_StopsOnClose(t *testing.T) {
 	conn, cleanup := newTestWS(t)
 	defer cleanup()
 
-	client := NewClient(uuid.New(), conn)
+	client := NewClient(uuid.New(), conn, nil)
 
 	done := make(chan struct{})
 	go func() {
@@ -90,7 +90,7 @@ func TestWriteMessage(t *testing.T) {
 	conn, cleanup := newTestWS(t)
 	defer cleanup()
 
-	client := NewClient(uuid.New(), conn)
+	client := NewClient(uuid.New(), conn, nil)
 
 	go client.writeLoop()
 
@@ -105,7 +105,7 @@ func BenchmarkClient_WriteLoop(b *testing.B) {
 	conn, cleanup := newTestWS(&testing.T{})
 	defer cleanup()
 
-	client := NewClient(uuid.New(), conn)
+	client := NewClient(uuid.New(), conn, nil)
 
 	go client.writeLoop()
 	defer client.CloseCon()

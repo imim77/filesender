@@ -14,7 +14,7 @@ func newTestClient(t *testing.T, alias string) (*Client, func()) {
 	t.Helper()
 
 	conn, cleanup := newTestWS(t)
-	cli := NewClient(uuid.New(), conn)
+	cli := NewClient(uuid.New(), conn, nil)
 	cli.SetInfo(ClientInfoWithoutId{Alias: alias})
 
 	return cli, cleanup

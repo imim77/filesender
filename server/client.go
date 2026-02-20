@@ -2,8 +2,8 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
+	"net/http"
 	"sync"
 	"time"
 
@@ -28,15 +28,17 @@ type Client struct {
 	CloseOnce sync.Once
 	mu        sync.RWMutex
 	info      ClientInfoWithoutId
+	core      *Core
 	Msgch     chan []byte
 	Close     chan struct{}
 }
 
-func NewClient(id uuid.UUID, conn *websocket.Conn) *Client {
+func NewClient(id uuid.UUID, conn *websocket.Conn, core *Core) *Client {
 	return &Client{
 		ClientId: id,
 		Conn:     conn,
-		Msgch:    make(chan []byte),
+		core:     core,
+		Msgch:    make(chan []byte, 64),
 		Close:    make(chan struct{}),
 	}
 }
@@ -48,6 +50,11 @@ func (c *Client) loop() {
 
 func (c *Client) readLoop() {
 	defer func() {
+		if c.core != nil {
+			if err := c.core.Unregister(c.ClientId); err != nil && err != ErrCoreClosed {
+				log.Printf("[%s] unregister failed: %v", c.ClientId, err)
+			}
+		}
 		c.CloseCon()
 	}()
 	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
@@ -61,8 +68,19 @@ func (c *Client) readLoop() {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("[%s] read error: %v", c.ClientId, err)
 			}
+			return
 		}
-		fmt.Printf("%v", raw)
+		var msg WsClientMessage
+		if err := json.Unmarshal(raw, &msg); err != nil {
+			log.Printf("[%s] invalid JSON: %v", c.ClientId, err)
+			_ = c.SendJSON(ErrorMessage{Type: "ERROR", Code: http.StatusBadRequest})
+			continue
+		}
+		if err := c.core.RouteMessage(c.ClientId, msg); err != nil {
+			log.Printf("[%s] error routing message: %v", c.ClientId, err)
+			_ = c.SendJSON(ErrorMessage{Type: "ERROR", Code: http.StatusBadRequest})
+		}
+
 	}
 }
 

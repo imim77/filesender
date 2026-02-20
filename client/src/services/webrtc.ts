@@ -1,4 +1,5 @@
 
+
 import type { IceServerInfo, SignalingConnection } from "./signaling";
 
 export class Peer{
@@ -8,6 +9,7 @@ export class Peer{
     peerId: string;
     sessionId: string;
     isConnected: boolean = false;
+    isCaller: boolean = false;
     iceServers: IceServerInfo[] = [];
 
     constructor({signaling, peerId, sessionId
@@ -52,9 +54,14 @@ export class Peer{
         }
 
         this.pc.ondatachannel = (ev) => {
-            
+            this.setupDataChannel(ev.channel);
         }
 
+        this.createDataChannel();
+
+        if(this.isCaller){
+            this.createOffer();
+        }
 
     }
 
@@ -64,12 +71,108 @@ export class Peer{
         dc.onopen = () => {
             console.log("Data channel opeend");
         }
+        dc.onmessage = () => {
+            console.log("Process message on message");
+        }
+
+        dc.onclose = ()=>{
+            console.log('Data channel closed');
+        }
+
+        dc.onerror = (error) => {
+            console.error('Data channel error: ', error)
+        }
     }
 
     createDataChannel(){
         if(!this.pc) return;
         const dc = this.pc.createDataChannel('data', {ordered: true})
+        this.setupDataChannel(dc)
         
 
     }
+
+    private async createOffer(){
+        if(!this.pc) return;
+        try{
+            const offer = await this.pc.createOffer();
+            await this.pc.setLocalDescription(offer);
+            this.signaling.send({
+                type: "OFFER",
+                sessionId: this.sessionId,
+                target: this.peerId,
+                sdp: offer.sdp!,
+            })
+        }catch(error){  
+            console.error('Failed to create offer: ', error);
+        }
+    }
+
+    async HandlerOffer(offer: RTCSessionDescriptionInit){
+        if(!this.pc){
+            this.createPeerConnection()
+        }
+        if(!this.pc) return;
+
+        try{
+            await this.pc.setRemoteDescription(offer);
+            const answer = await this.pc.createAnswer();
+            await this.pc.setLocalDescription(answer);
+
+            this.signaling.send({
+                type: "ANSWER",
+                sessionId: this.sessionId,
+                target: this.peerId,
+                sdp: answer.sdp!,
+            })
+        }catch(error){
+            console.error('Failed to handle offer:', error);
+        }
+        
+    }
+
+    async HandleAnswer(answer: RTCSessionDescriptionInit){
+        if(!this.pc) return;
+
+        try{
+            await this.pc.setRemoteDescription(answer);
+        }catch(error){
+            console.error('Failed to handle answer:', error);
+        }
+    }
+
+    async HandleCandidate(candidate: RTCIceCandidateInit | RTCIceCandidate){
+        if(!this.pc) return;
+
+        try{
+            const iceCandidate = candidate instanceof RTCIceCandidate ? candidate : new RTCIceCandidate(candidate);
+            this.pc.addIceCandidate(iceCandidate)
+        }catch(error){
+            console.error('Failed to add ICE candidate', error)
+        }
+        
+            
+    }
+
+    destroy(){
+        if (this.dc) {
+            this.dc.onopen = null;
+            this.dc.onmessage = null;
+            this.dc.onclose = null;
+            this.dc.onerror = null;
+            this.dc.close();
+            this.dc = null;
+        }
+
+        if (this.pc) {
+            this.pc.onicecandidate = null;
+            this.pc.onconnectionstatechange = null;
+            this.pc.ondatachannel = null;
+            this.pc.close();
+            this.pc = null;
+        }
+
+        this.isConnected = false;
+    }
+
 }

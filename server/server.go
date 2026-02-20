@@ -74,7 +74,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to upgrade to websocket", http.StatusBadRequest)
 		return
 	}
-	client := NewClient(uuid.New(), conn)
+	client := NewClient(uuid.New(), conn, s.core)
 	log.Printf("Client connected: %s (%s)", client.ClientId, conn.RemoteAddr())
 	res, err := s.core.Register(client)
 	if err != nil {
