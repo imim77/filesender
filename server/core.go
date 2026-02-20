@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"sync"
 
 	"github.com/google/uuid"
@@ -36,6 +38,12 @@ type WsClientMessage struct {
 	Info      *ClientInfoWithoutId `json:"info,omitempty"`
 }
 
+type UpdateMessage struct {
+	Type string     `json:"type"`
+	Peer ClientInfo `json:"peer"`
+}
+
+// pretty ugly tbh
 type coreMessage interface {
 	isCoreMessage()
 }
@@ -52,6 +60,14 @@ type unregisterMsg struct {
 }
 
 func (m unregisterMsg) isCoreMessage() {}
+
+type routeMsg struct {
+	ClientId uuid.UUID
+	Message  WsClientMessage
+	Response chan error
+}
+
+func (m routeMsg) isCoreMessage() {}
 
 type RegisterResult struct {
 	Peers    []ClientInfo
@@ -143,4 +159,57 @@ func (c *Core) handleUnregister(msg unregisterMsg) {
 	}
 	cli.CloseCon()
 	delete(c.clients, msg.ClientID)
+}
+
+func (c *Core) handleRoute(clientId uuid.UUID, msg WsClientMessage) error {
+	switch msg.Type {
+	case "UPDATE":
+		return c.handleUpdate(clientId, msg)
+	default:
+		return fmt.Errorf("unknown message type: %s", msg.Type)
+	}
+}
+
+func (c *Core) handleUpdate(clientId uuid.UUID, msg WsClientMessage) error {
+	cli, err := c.getClient(clientId)
+	if err != nil {
+		return err
+	}
+	if msg.Info == nil {
+		return nil
+	}
+	cli.SetInfo(*msg.Info)
+
+	update := UpdateMessage{Type: "UPDATE", Peer: cli.GetPublicInfo()}
+	updateData, err := json.Marshal(update)
+	if err != nil {
+		return fmt.Errorf("failed to encode UPDATE message: %w", err)
+	}
+
+	for _, peer := range c.getOthers(clientId) {
+		if err := peer.Send(updateData); err != nil {
+			log.Printf("[%s] failed to send UPDATE to %s: %v", clientId, peer.ClientId, err)
+		}
+	}
+
+	return nil
+}
+
+func (c *Core) getClient(clientId uuid.UUID) (*Client, error) {
+	client, ok := c.clients[clientId]
+	if !ok {
+		return nil, ErrClientNotFound
+	}
+	return client, nil
+}
+
+func (c *Core) getOthers(excludeId uuid.UUID) []*Client {
+	others := make([]*Client, len(c.clients))
+	for id, client := range c.clients {
+		if id == excludeId {
+			continue
+		}
+		others = append(others, client)
+	}
+	return others
 }

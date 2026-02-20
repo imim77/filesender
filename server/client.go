@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
@@ -83,6 +84,25 @@ func (c *Client) writeLoop() {
 
 		}
 	}
+}
+
+func (c *Client) Send(payload []byte) error {
+	select {
+	case <-c.Close:
+		return ErrClientClosed
+	case c.Msgch <- payload:
+		return nil
+	default:
+		return ErrMailboxFull
+	}
+}
+
+func (c *Client) SendJSON(v any) error {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	return c.Send(data)
 }
 
 func (c *Client) CloseCon() {
