@@ -1,69 +1,131 @@
 
-export class SignalingConnection extends EventTarget{
-    socket: WebSocket|null = null;
-    url: string;
-    info: ClientInfoWithoutId|null;
-    private _iceServers: IceServerInfo[] = [];
+export class SignalingConnection {
+    socket: WebSocket | null = null;
+    info: ClientInfoWithoutId | null;
+    url: string = this._endpoint;
+    _iceServers: IceServerInfo[] = [];
+    _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    _isDestroyed = false;
+    _onOpen?: () => void;
+    _onMessage?: (msg: WsServerMessage) => void;
+    _onClose?: (e: CloseEvent) => void;
+    _onError?: (err: unknown) => void;
 
+    constructor(opts: {
+        info?: ClientInfoWithoutId;
+        onOpen?: () => void;
+        onMessage?: (msg: WsServerMessage) => void;
+        onClose?: (ev: CloseEvent) => void;
+        onError?: (err: unknown) => void;
+    }) {
+        this.info = opts.info ?? null; 
 
-    constructor({info}: {info?: ClientInfoWithoutId}){
-        super()
-        this.url = this.endpoint
-        this.info = info ?? null;
+        this._onOpen = opts.onOpen;
+        this._onMessage = opts.onMessage;
+        this._onClose = opts.onClose;
+        this._onError = opts.onError;
+
+        this._connect();
     }
 
-    connect(){
-        const ws = new WebSocket(this.url)
-        ws.onopen = ()=>{
-            console.log('WS: signaling connection established');
-            this.dispatchEvent(new CustomEvent('open'));
+    send(msg: WsClientMessage){
+        if (!this._isConnected()) return false;
+        this.socket!.send(JSON.stringify(msg));
+        return true;
+    }
 
+    getIceServers(): IceServerInfo[] {
+        return this._iceServers;
+    }
+
+    destroy(): void {
+        this._isDestroyed = true;
+        this._clearReconnectTimer();
+
+        if (this.socket) {
+            this.socket.onopen = null;
+            this.socket.onmessage = null;
+            this.socket.onerror = null;
+            this.socket.onclose = null;
+            this.socket.close();
+            this.socket = null;
+        }
+    }
+
+    private _connect(){
+        if (this._isDestroyed) return;
+        if (this._isConnected() || this._isConnecting()) return;
+
+        this._clearReconnectTimer();
+
+        const ws = new WebSocket(this.url);
+
+        ws.onopen = () => {
             if (this.info) {
                 this.send({
                     type: 'UPDATE',
                     info: this.info,
                 });
             }
-        }
+            this._onOpen?.();
+        };
 
-        ws.onmessage = (event)=>{ 
+        ws.onmessage = (event) => {
             let msg: WsServerMessage;
-            try{
+            try {
                 msg = JSON.parse(event.data) as WsServerMessage;
-            }catch(error){
-                console.error('Failed to parse signaling message', error);
+            } catch (error) {
+                this._onError?.(error);
                 return;
             }
-            return this.onMessage(msg);
 
-        }
+            if (msg.type === 'HELLO' && msg.iceServers) {
+                this._iceServers = msg.iceServers;
+            }
 
-        ws.onerror = (error)=>{
-            console.error('WS: signaling error', error);
-            this.dispatchEvent(new CustomEvent('error', { detail: error }));
-        }
+            this._onMessage?.(msg);
+        };
+
+        ws.onerror = (error) => {
+            this._onError?.(error);
+        };
+
+        ws.onclose = (event) => {
+            this._handleClose(event);
+        };
 
         this.socket = ws;
     }
 
-    onMessage(msg: WsServerMessage){
-        if(msg.type === 'HELLO' && msg.iceServers){this._iceServers = msg.iceServers};
-        if(msg.type === 'ANSWER'){}
+    private _handleClose(event: CloseEvent){
+        this.socket = null;
+        this._onClose?.(event);
+
+        if (this._isDestroyed) return;
+
+        this._clearReconnectTimer();
+        this._reconnectTimer = setTimeout(() => this._connect(), 5000);
     }
 
-    get endpoint(){
+    private get _endpoint(){
         const protocol = location.protocol.startsWith('https') ? 'wss' : 'ws';
         const port = '9000';
         return `${protocol}://${location.hostname}:${port}/ws`;
     }
 
-    send(msg: WsClientMessage){
-        console.log("WS sending to the server: ", msg)
-        this.socket?.send(JSON.stringify(msg))
+    private _isConnected(){
+        return this.socket !== null && this.socket.readyState === WebSocket.OPEN;
     }
 
+    private _isConnecting(){
+        return this.socket !== null && this.socket.readyState === WebSocket.CONNECTING;
+    }
 
-
+    private _clearReconnectTimer(){
+        if (!this._reconnectTimer) return;
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
+    }
 }
 
 

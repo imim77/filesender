@@ -8,19 +8,18 @@
   }
   let signaling: SignalingConnection
   onMount(()=>{
-    signaling = new SignalingConnection({info:{alias:'TestUser', deviceType: 'Browser'}})
-    signaling.addEventListener('open', () => {
-      console.log('Connected to signaling server');
-    });
-
-    signaling.addEventListener('error', (e) => {
-      console.error('Signaling error:', e);
-    });
-
-    signaling.connect();
+    signaling = new SignalingConnection({
+      info: { alias: 'TestUser', deviceType: 'Browser' },
+      onOpen: () => {
+        console.log('Connected to signaling server');
+      },
+      onError: (e) => {
+        console.error('Signaling error:', e);
+      },
+    })
 
     return () => {
-      signaling?.socket?.close();
+      signaling?.destroy();
     };
   })
 </script>
