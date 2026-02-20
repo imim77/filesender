@@ -20,6 +20,8 @@ type Client struct {
 	ClientId  uuid.UUID
 	Conn      *websocket.Conn
 	CloseOnce sync.Once
+	mu        sync.RWMutex
+	info      ClientInfoWithoutId
 	Msgch     chan []byte
 	Close     chan struct{}
 }
@@ -88,4 +90,21 @@ func (c *Client) CloseCon() {
 		close(c.Close)
 		_ = c.Conn.Close()
 	})
+}
+
+func (c *Client) GetPublicInfo() ClientInfo {
+	c.mu.RLock()
+	info := c.info
+	c.mu.RUnlock()
+
+	return ClientInfo{
+		Id:                  c.ClientId,
+		ClientInfoWithoutId: info,
+	}
+}
+
+func (c *Client) SetInfo(info ClientInfoWithoutId) {
+	c.mu.Lock()
+	c.info = info
+	c.mu.Unlock()
 }
