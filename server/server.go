@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -10,6 +11,24 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type HelloMessage struct {
+	Type       string          `json:"type"`
+	Client     ClientInfo      `json:"client"`
+	Peers      []ClientInfo    `json:"peers"`
+	IceServers []IceServerInfo `json:"iceServers,omitempty"`
+}
+
+type IceServerInfo struct {
+	URLs       []string `json:"urls"`
+	Username   string   `json:"username,omitempty"`
+	Credential string   `json:"credential,omitempty"`
+}
+
+type JoinMessage struct {
+	Type string     `json:"type"`
+	Peer ClientInfo `json:"peer"`
+}
+
 type Config struct {
 	Host string
 	Port string
@@ -17,11 +36,13 @@ type Config struct {
 
 type Server struct {
 	cfg        *Config
+	core       *Core
 	httpServer *http.Server
 }
 
 func NewServer(cfg *Config) (*Server, error) {
-	srv := &Server{cfg: cfg}
+	core := NewCore()
+	srv := &Server{cfg: cfg, core: core}
 	srv.httpServer = &http.Server{
 		Addr:    net.JoinHostPort(cfg.Host, cfg.Port),
 		Handler: srv,
@@ -55,5 +76,31 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	client := NewClient(uuid.New(), conn)
 	log.Printf("Client connected: %s (%s)", client.ClientId, conn.RemoteAddr())
+	res, err := s.core.Register(client)
+	if err != nil {
+		log.Printf("failed to register client %s: %v", client.ClientId, err)
+		conn.Close()
+		return
+	}
+	client.loop()
+	hello := HelloMessage{
+		Type:   "HELLO",
+		Client: client.GetPublicInfo(),
+		Peers:  res.Peers,
+	}
+	if err := client.SendJSON(hello); err != nil {
+		log.Printf("[%s] failed to send HELLO: %v", client.ClientId, err)
+		_ = s.core.Unregister(client.ClientId)
+		return
+	}
 
+	join := JoinMessage{Type: "JOIN", Peer: client.GetPublicInfo()}
+	joinData, _ := json.Marshal(join)
+
+	for _, peer := range res.Existing {
+		if err := peer.Send(joinData); err != nil {
+			log.Printf("[%s] failed to notify peer %s: %v", client.ClientId, peer.ClientId, err)
+		}
+	}
+	log.Printf("client %s actor started, handling messages independently", client.ClientId)
 }
