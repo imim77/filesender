@@ -47,10 +47,11 @@ type registerMsg struct {
 
 func (m registerMsg) isCoreMessage() {}
 
-type RegisterMsg struct {
-	Client *ClientInfo
-	Resp   chan RegisterResult
+type unregisterMsg struct {
+	ClientID uuid.UUID
 }
+
+func (m unregisterMsg) isCoreMessage() {}
 
 type RegisterResult struct {
 	Peers    []ClientInfo
@@ -78,7 +79,7 @@ func (c *Core) run() {
 	for {
 		select {
 		case <-c.closed:
-			for i, _ := range c.clients {
+			for i := range c.clients {
 				c.clients[i].CloseCon()
 			}
 			return
@@ -86,6 +87,8 @@ func (c *Core) run() {
 			switch m := msg.(type) {
 			case registerMsg:
 				c.handleRegister(m)
+			case unregisterMsg:
+				c.handleUnregister(m)
 			}
 
 		}
@@ -104,10 +107,10 @@ func (c *Core) Enqueue(msg coreMessage) error {
 	}
 }
 
-func (c *Core) RegisterPeer(cli *Client) (RegisterResult, error) {
+func (c *Core) Register(cli *Client) (RegisterResult, error) {
 	resp := make(chan RegisterResult, 1)
 	if err := c.Enqueue(registerMsg{Client: cli, Response: resp}); err != nil {
-		return RegisterResult{}, nil
+		return RegisterResult{}, err
 	}
 	select {
 	case result := <-resp:
@@ -116,6 +119,10 @@ func (c *Core) RegisterPeer(cli *Client) (RegisterResult, error) {
 		return RegisterResult{}, ErrCoreClosed
 	}
 
+}
+
+func (c *Core) Unregister(clientId uuid.UUID) error {
+	return c.Enqueue(unregisterMsg{ClientID: clientId})
 }
 
 func (c *Core) handleRegister(msg registerMsg) {
@@ -127,4 +134,13 @@ func (c *Core) handleRegister(msg registerMsg) {
 	}
 	c.clients[msg.Client.ClientId] = msg.Client
 	msg.Response <- RegisterResult{Peers: peers, Existing: existing}
+}
+
+func (c *Core) handleUnregister(msg unregisterMsg) {
+	cli, ok := c.clients[msg.ClientID]
+	if !ok {
+		return
+	}
+	cli.CloseCon()
+	delete(c.clients, msg.ClientID)
 }
