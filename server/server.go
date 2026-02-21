@@ -54,7 +54,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	turnServer, err := startTURN(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start TURN server: %w", err)
+		log.Printf("warning: TURN disabled: %v", err)
 	}
 
 	srv := &Server{cfg: cfg, core: core, turnServer: turnServer}
@@ -102,7 +102,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		Type:       "HELLO",
 		Client:     client.GetPublicInfo(),
 		Peers:      res.Peers,
-		IceServers: buildIceServers(s.cfg, r),
+		IceServers: buildIceServers(s.cfg, r, s.turnServer != nil),
 	}
 	if err := client.SendJSON(hello); err != nil {
 		log.Printf("[%s] failed to send HELLO: %v", client.ClientId, err)

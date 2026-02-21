@@ -6,14 +6,12 @@
     type ClientInfo,
     type WsServerMessage,
   } from '../services/signaling';
-  import type { Peer } from '../services/webrtc';
 
   let signaling: SignalingConnection | null = null;
   let peerManager: PeerManager | null = null;
 
   let me: ClientInfo | null = $state(null);
   let peers: ClientInfo[] = $state([]);
-  let sessions: Peer[] = $state([]);
   let lastError = $state('');
 
   function shouldInitiate(peerId: string): boolean {
@@ -21,8 +19,12 @@
     return me.id.localeCompare(peerId) < 0;
   }
 
-  function refreshSessions() {
-    sessions = peerManager ? Array.from(peerManager.peersBySessionId.values()) : [];
+  function hasSessionForPeer(peerId: string): boolean {
+    if (!peerManager) return false;
+    for (const peer of peerManager.peersBySessionId.values()) {
+      if (peer.peerId === peerId) return true;
+    }
+    return false;
   }
 
   function upsertPeer(peer: ClientInfo) {
@@ -46,7 +48,6 @@
   async function handleServerMessage(msg: WsServerMessage) {
     console.log('[WS] incoming:', msg.type, msg);
     await peerManager?.handleMessage(msg);
-    refreshSessions();
 
     switch (msg.type) {
       case 'HELLO':
@@ -79,7 +80,7 @@
       return;
     }
 
-    const alreadyConnected = sessions.some((session) => session.peerId === peerId);
+    const alreadyConnected = hasSessionForPeer(peerId);
     if (alreadyConnected) {
       console.log('[CONNECT] session already exists:', peerId);
       return;
@@ -87,12 +88,6 @@
 
     console.log(isAutomatic ? '[AUTO CONNECT] starting session to:' : '[CONNECT] starting session to:', peerId);
     peerManager.startSession(peerId);
-    refreshSessions();
-  }
-
-  function sendPing(session: Peer) {
-    if (session.dc?.readyState !== 'open') return;
-    session.dc.send(`ping:${Date.now()}`);
   }
 
   onMount(() => {
@@ -120,8 +115,19 @@
 
     peerManager = new PeerManager({
       signaling,
-      onPeerCreated: refreshSessions,
-      onPeerRemoved: refreshSessions,
+      onPeerCreated: (peer) => {
+        console.log('[PeerManager] peer session created', {
+          sessionId: peer.sessionId,
+          peerId: peer.peerId,
+          isCaller: peer.isCaller,
+        });
+      },
+      onPeerRemoved: (peer) => {
+        console.log('[PeerManager] peer session removed', {
+          sessionId: peer.sessionId,
+          peerId: peer.peerId,
+        });
+      },
       onError: (error) => {
         lastError = error instanceof Error ? error.message : String(error);
         console.error('Peer manager error:', error);
@@ -150,27 +156,6 @@
         <li>
           <strong>{peer.alias || 'Anonymous'}</strong>
           <code>{peer.id}</code>
-          <button onclick={() => connectToPeer(peer.id)}>Connect</button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
-</section>
-
-<section>
-  <h2>Sessions</h2>
-  {#if sessions.length === 0}
-    <p>No active sessions.</p>
-  {:else}
-    <ul>
-      {#each sessions as session}
-        <li>
-          <span>{session.peerId}</span>
-          <span>state: {session.pc?.connectionState ?? 'new'}</span>
-          <span>dc: {session.dc?.readyState ?? 'none'}</span>
-          <button onclick={() => sendPing(session)} disabled={session.dc?.readyState !== 'open'}>
-            Send Ping
-          </button>
         </li>
       {/each}
     </ul>

@@ -13,8 +13,14 @@ func run(ctx context.Context, stdout, stderr io.Writer) error {
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 	defer cancel()
 	cfg := Config{
-		Host: "",
-		Port: "9000",
+		Host:         "",
+		Port:         "9000",
+		TURNPort:     "3478",
+		TURNRealm:    "justdrop",
+		TURNSecret:   "change-me-in-production",
+		PublicHost:   "",
+		RelayPortMin: 49152,
+		RelayPortMax: 65535,
 	}
 
 	srv, err := NewServer(&cfg)

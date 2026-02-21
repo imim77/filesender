@@ -26,6 +26,10 @@ func generateTURNCredentials(secret string, ttl time.Duration) (username, passwo
 }
 
 func startTURN(cfg *Config) (*turn.Server, error) {
+	if cfg.TURNPort == "" {
+		return nil, fmt.Errorf("TURN port is required")
+	}
+
 	publicIp := cfg.PublicIp
 	if publicIp == "" {
 		publicIp = "127.0.0.1"
@@ -38,14 +42,15 @@ func startTURN(cfg *Config) (*turn.Server, error) {
 		}
 		relayIp = resolved.IP
 	}
-	addr := fmt.Sprintf("0.0.0.0:%d", cfg.TURNPort)
-	udpListener, err := net.ListenPacket("tcp4", addr)
+	addr := net.JoinHostPort("0.0.0.0", cfg.TURNPort)
+	udpListener, err := net.ListenPacket("udp4", addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen UDP for TURN: %w", err)
 	}
 
 	tcpListener, err := net.Listen("tcp4", addr)
 	if err != nil {
+		_ = udpListener.Close()
 		return nil, fmt.Errorf("failed to listen TCP for TURN: %w", err)
 	}
 
@@ -92,10 +97,12 @@ func startTURN(cfg *Config) (*turn.Server, error) {
 		ListenerConfigs: listenerConfigs,
 	})
 	if err != nil {
+		_ = udpListener.Close()
+		_ = tcpListener.Close()
 		return nil, fmt.Errorf("failed to create TURN server: %w", err)
 	}
 
-	log.Printf("TURN server listening on UDP+TCP :%d (realm=%s, publicIP=%s, relay=%d-%d)",
+	log.Printf("TURN server listening on UDP+TCP :%s (realm=%s, publicIP=%s, relay=%d-%d)",
 		cfg.TURNPort, cfg.TURNRealm, publicIp, cfg.RelayPortMin, cfg.RelayPortMax)
 	return turnserver, nil
 
@@ -110,16 +117,26 @@ func getIceHost(cfg *Config, r *http.Request) string {
 	}
 	if r != nil {
 		if h := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0]); h != "" {
+			if host, _, err := net.SplitHostPort(h); err == nil && host != "" {
+				return host
+			}
 			return h
 		}
 		if r.Host != "" {
+			if host, _, err := net.SplitHostPort(r.Host); err == nil && host != "" {
+				return host
+			}
 			return r.Host
 		}
 	}
 	return "127.0.0.1"
 }
 
-func buildIceServers(cfg *Config, r *http.Request) []IceServerInfo {
+func buildIceServers(cfg *Config, r *http.Request, includeTURN bool) []IceServerInfo {
+	if !includeTURN {
+		return []IceServerInfo{{URLs: []string{"stun:stun.l.google.com:19302"}}}
+	}
+
 	host := getIceHost(cfg, r)
 	if host == "localhost" {
 		host = "127.0.0.1"

@@ -12,6 +12,7 @@ export class Peer{
     isCaller: boolean = false;
     iceServers: IceServerInfo[] = [];
     private pendingCandidates: RTCIceCandidateInit[] = [];
+    private lastConnectionState: RTCPeerConnectionState | null = null;
 
     constructor({signaling, peerId, sessionId
     }: {
@@ -61,10 +62,27 @@ export class Peer{
                 sessionId: this.sessionId,
                 peerId: this.peerId,
             });
+            if (!state || state === this.lastConnectionState) {
+                return;
+            }
+
+            this.lastConnectionState = state;
             if (state === 'connected') {
-                this.isConnected = true; 
+                this.isConnected = true;
+                console.log('[WebRTC] peer connected', {
+                    sessionId: this.sessionId,
+                    peerId: this.peerId,
+                    role: this.isCaller ? 'caller' : 'callee',
+                });
+                this.logSelectedCandidatePair();
             } else if (state === 'disconnected' || state === 'failed' || state === 'closed') {
-                this.isConnected = false; 
+                this.isConnected = false;
+                console.warn('[WebRTC] peer not connected', {
+                    state,
+                    sessionId: this.sessionId,
+                    peerId: this.peerId,
+                    role: this.isCaller ? 'caller' : 'callee',
+                });
             }
         }
 
@@ -233,6 +251,7 @@ export class Peer{
         }
 
         this.isConnected = false;
+        this.lastConnectionState = null;
         this.pendingCandidates = [];
     }
 
@@ -254,6 +273,52 @@ export class Peer{
             } catch (error) {
                 console.error('Failed to flush ICE candidate', error);
             }
+        }
+    }
+
+    private async logSelectedCandidatePair(): Promise<void> {
+        if (!this.pc) return;
+
+        try {
+            const stats = await this.pc.getStats();
+            const transports: RTCStats[] = [];
+            stats.forEach((entry) => {
+                if (entry.type === 'transport') {
+                    transports.push(entry);
+                }
+            });
+
+            for (const transport of transports as RTCTransportStats[]) {
+                const pairId = transport.selectedCandidatePairId;
+                if (!pairId) continue;
+                const pair = stats.get(pairId) as RTCStats | undefined;
+                if (!pair || pair.type !== 'candidate-pair') continue;
+                const local = stats.get((pair as RTCIceCandidatePairStats).localCandidateId) as RTCStats | undefined;
+                const remote = stats.get((pair as RTCIceCandidatePairStats).remoteCandidateId) as RTCStats | undefined;
+
+                const localCandidate = local as RTCStats & { protocol?: string; address?: string; port?: number };
+                const remoteCandidate = remote as RTCStats & { protocol?: string; address?: string; port?: number };
+
+                console.log('[WebRTC] selected ICE candidate pair', {
+                    sessionId: this.sessionId,
+                    peerId: this.peerId,
+                    local: local ? `${localCandidate.protocol ?? 'unknown'}:${localCandidate.address ?? 'unknown'}:${localCandidate.port ?? 'unknown'}` : 'unknown',
+                    remote: remote ? `${remoteCandidate.protocol ?? 'unknown'}:${remoteCandidate.address ?? 'unknown'}:${remoteCandidate.port ?? 'unknown'}` : 'unknown',
+                    currentRoundTripTime: (pair as RTCIceCandidatePairStats).currentRoundTripTime,
+                });
+                return;
+            }
+
+            console.log('[WebRTC] selected ICE candidate pair unavailable', {
+                sessionId: this.sessionId,
+                peerId: this.peerId,
+            });
+        } catch (error) {
+            console.warn('[WebRTC] failed to read ICE candidate pair stats', {
+                sessionId: this.sessionId,
+                peerId: this.peerId,
+                error,
+            });
         }
     }
 
