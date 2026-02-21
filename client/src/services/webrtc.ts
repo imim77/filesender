@@ -364,5 +364,42 @@ class FileTransfer{
         this.peerId = opts.peerId;
     }
 
+    sendFiles(files: FileList | File[]){
+        const list = Array.isArray(files) ? files : Array.from(files);
+        for(const file of files){
+            this.filesQueue.push(file);
+        }
+        if(this.busy){
+            return;
+        }
+    }
+
+    handleIncomingMessage(message: string | ArrayBuffer | Blob){
+        if(typeof message !== 'string'){
+            await this.onChunkRecieved(message);
+            return;
+        }
+        let parsedMsg: TransferMessage;
+        try{
+            parsedMsg = JSON.parse(message) as TransferMessage;
+        }catch(error){
+            console.warn('[WebRTC] invalid transfer control message', { peerId: this.peerId, error });
+            return;
+        }
+
+        switch(parsedMsg.type)
+    }
+
+
+
+    private async onChunkRecieved(chunk: ArrayBuffer | Blob){
+        if(!this.digester){
+            console.warn('[WebRTC] received chunk without header', { peerId: this.peerId });
+            return;
+        }
+
+
+    }
+
 
 }
