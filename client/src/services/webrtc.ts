@@ -1,5 +1,6 @@
 
 
+import type { StringMappingType } from "typescript";
 import { FileChunker, FileDigester, type ReceivedFile } from "./files";
 import type { IceServerInfo, SignalingConnection } from "./signaling";
 
@@ -340,3 +341,28 @@ export class Peer{
 
 }
 
+
+type TransferMessage = 
+    | {type: 'header'; name: string; mime?: string, size: number}
+    | {type: 'partition'; offset: number}
+    | { type: 'partition-received'; offset: number }
+    | { type: 'progress'; progress: number }
+    | { type: 'transfer-complete' };
+
+
+
+class FileTransfer{
+    private peerId: string
+    private filesQueue: File[] = [];
+    busy = false;
+    private chunker:  FileChunker | null = null;
+    private digester: FileDigester|null = null;
+
+    constructor(opts: {
+        peerId: string;
+    }){
+        this.peerId = opts.peerId;
+    }
+
+
+}
