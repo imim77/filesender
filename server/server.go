@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/pion/turn/v4"
 )
 
 type HelloMessage struct {
@@ -30,19 +31,33 @@ type JoinMessage struct {
 }
 
 type Config struct {
-	Host string
-	Port string
+	Host         string
+	Port         string
+	PublicHost   string
+	PublicIp     string
+	TURNPort     string
+	TURNRealm    string
+	TURNSecret   string
+	RelayPortMin uint16
+	RelayPortMax uint16
 }
 
 type Server struct {
 	cfg        *Config
 	core       *Core
+	turnServer *turn.Server
 	httpServer *http.Server
 }
 
 func NewServer(cfg *Config) (*Server, error) {
 	core := NewCore()
-	srv := &Server{cfg: cfg, core: core}
+
+	turnServer, err := startTURN(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start TURN server: %w", err)
+	}
+
+	srv := &Server{cfg: cfg, core: core, turnServer: turnServer}
 	srv.httpServer = &http.Server{
 		Addr:    net.JoinHostPort(cfg.Host, cfg.Port),
 		Handler: srv,
@@ -84,9 +99,10 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	client.loop()
 	hello := HelloMessage{
-		Type:   "HELLO",
-		Client: client.GetPublicInfo(),
-		Peers:  res.Peers,
+		Type:       "HELLO",
+		Client:     client.GetPublicInfo(),
+		Peers:      res.Peers,
+		IceServers: buildIceServers(s.cfg, r),
 	}
 	if err := client.SendJSON(hello); err != nil {
 		log.Printf("[%s] failed to send HELLO: %v", client.ClientId, err)

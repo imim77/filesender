@@ -11,6 +11,7 @@ export class Peer{
     isConnected: boolean = false;
     isCaller: boolean = false;
     iceServers: IceServerInfo[] = [];
+    private pendingCandidates: RTCIceCandidateInit[] = [];
 
     constructor({signaling, peerId, sessionId
     }: {
@@ -34,8 +35,18 @@ export class Peer{
         };
 
         this.pc = new RTCPeerConnection(config);
+        console.log('[WebRTC] create peer connection', {
+            sessionId: this.sessionId,
+            peerId: this.peerId,
+            isCaller: this.isCaller,
+            iceServers: this.iceServers,
+        });
         this.pc.onicecandidate = (event) => {
             if(event.candidate){
+                console.log('[WebRTC] local ICE candidate', {
+                    sessionId: this.sessionId,
+                    peerId: this.peerId,
+                });
                 this.signaling.send({
                     type:'CANDIDATE',
                     sessionId: this.sessionId,
@@ -46,6 +57,10 @@ export class Peer{
         }
         this.pc.onconnectionstatechange = () => {
             const state = this.pc?.connectionState;
+            console.log('[WebRTC] connection state:', state, {
+                sessionId: this.sessionId,
+                peerId: this.peerId,
+            });
             if (state === 'connected') {
                 this.isConnected = true; 
             } else if (state === 'disconnected' || state === 'failed' || state === 'closed') {
@@ -53,11 +68,20 @@ export class Peer{
             }
         }
 
+        this.pc.oniceconnectionstatechange = () => {
+            console.log('[WebRTC] ICE connection state:', this.pc?.iceConnectionState, {
+                sessionId: this.sessionId,
+                peerId: this.peerId,
+            });
+        }
+
         this.pc.ondatachannel = (ev) => {
             this.setupDataChannel(ev.channel);
         }
 
-        this.createDataChannel();
+        if (this.isCaller) {
+            this.createDataChannel();
+        }
 
         if(this.isCaller){
             this.createOffer();
@@ -69,10 +93,10 @@ export class Peer{
         this.dc = dc;
         dc.binaryType = 'arraybuffer';
         dc.onopen = () => {
-            console.log("Data channel opeend");
+            console.log('Data channel opened');
         }
-        dc.onmessage = () => {
-            console.log("Process message on message");
+        dc.onmessage = (event) => {
+            console.log('Data channel message:', event.data);
         }
 
         dc.onclose = ()=>{
@@ -85,7 +109,7 @@ export class Peer{
     }
 
     createDataChannel(){
-        if(!this.pc) return;
+        if(!this.pc || this.dc) return;
         const dc = this.pc.createDataChannel('data', {ordered: true})
         this.setupDataChannel(dc)
         
@@ -97,6 +121,10 @@ export class Peer{
         try{
             const offer = await this.pc.createOffer();
             await this.pc.setLocalDescription(offer);
+            console.log('[WebRTC] sending offer', {
+                sessionId: this.sessionId,
+                peerId: this.peerId,
+            });
             this.signaling.send({
                 type: "OFFER",
                 sessionId: this.sessionId,
@@ -115,10 +143,19 @@ export class Peer{
         if(!this.pc) return;
 
         try{
+            console.log('[WebRTC] received offer', {
+                sessionId: this.sessionId,
+                peerId: this.peerId,
+            });
             await this.pc.setRemoteDescription(offer);
+            await this.flushPendingCandidates();
             const answer = await this.pc.createAnswer();
             await this.pc.setLocalDescription(answer);
 
+            console.log('[WebRTC] sending answer', {
+                sessionId: this.sessionId,
+                peerId: this.peerId,
+            });
             this.signaling.send({
                 type: "ANSWER",
                 sessionId: this.sessionId,
@@ -135,7 +172,12 @@ export class Peer{
         if(!this.pc) return;
 
         try{
+            console.log('[WebRTC] received answer', {
+                sessionId: this.sessionId,
+                peerId: this.peerId,
+            });
             await this.pc.setRemoteDescription(answer);
+            await this.flushPendingCandidates();
         }catch(error){
             console.error('Failed to handle answer:', error);
         }
@@ -145,8 +187,26 @@ export class Peer{
         if(!this.pc) return;
 
         try{
-            const iceCandidate = candidate instanceof RTCIceCandidate ? candidate : new RTCIceCandidate(candidate);
-            this.pc.addIceCandidate(iceCandidate)
+            const normalized = candidate instanceof RTCIceCandidate ? candidate.toJSON() : candidate;
+            if (!normalized?.candidate) {
+                return;
+            }
+
+            if (!this.pc.remoteDescription) {
+                console.log('[WebRTC] queue remote ICE candidate until remote description', {
+                    sessionId: this.sessionId,
+                    peerId: this.peerId,
+                });
+                this.pendingCandidates.push(normalized);
+                return;
+            }
+
+            const iceCandidate = new RTCIceCandidate(normalized);
+            console.log('[WebRTC] add remote ICE candidate', {
+                sessionId: this.sessionId,
+                peerId: this.peerId,
+            });
+            await this.pc.addIceCandidate(iceCandidate)
         }catch(error){
             console.error('Failed to add ICE candidate', error)
         }
@@ -173,6 +233,28 @@ export class Peer{
         }
 
         this.isConnected = false;
+        this.pendingCandidates = [];
+    }
+
+    private async flushPendingCandidates(): Promise<void> {
+        if (!this.pc || !this.pc.remoteDescription || this.pendingCandidates.length === 0) {
+            return;
+        }
+
+        const candidates = this.pendingCandidates;
+        this.pendingCandidates = [];
+
+        for (const candidate of candidates) {
+            try {
+                console.log('[WebRTC] flush queued ICE candidate', {
+                    sessionId: this.sessionId,
+                    peerId: this.peerId,
+                });
+                await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (error) {
+                console.error('Failed to flush ICE candidate', error);
+            }
+        }
     }
 
 }

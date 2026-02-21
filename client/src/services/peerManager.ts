@@ -8,6 +8,7 @@ import { Peer } from './webrtc';
 export class PeerManager {
     signaling: SignalingConnection;
     peersBySessionId: Map<string, Peer> = new Map();
+    pendingCandidatesBySessionId: Map<string, RTCIceCandidateInit[]> = new Map();
 
     _onPeerCreated?: (peer: Peer) => void;
     _onPeerRemoved?: (peer: Peer) => void;
@@ -31,6 +32,8 @@ export class PeerManager {
             return existing;
         }
 
+        console.log('[PeerManager] start session', { sessionId, peerId });
+
         const peer = new Peer({
             signaling: this.signaling,
             peerId,
@@ -48,6 +51,7 @@ export class PeerManager {
     }
 
     async handleMessage(msg: WsServerMessage): Promise<void> {
+        console.log('[PeerManager] handle message', msg.type);
         switch (msg.type) {
             case 'HELLO':
                 this._refreshIceServers();
@@ -79,6 +83,7 @@ export class PeerManager {
             if (peer.peerId !== peerId) continue;
             peer.destroy();
             this.peersBySessionId.delete(sessionId);
+            this.pendingCandidatesBySessionId.delete(sessionId);
             this._onPeerRemoved?.(peer);
         }
     }
@@ -89,6 +94,7 @@ export class PeerManager {
             this._onPeerRemoved?.(peer);
         }
         this.peersBySessionId.clear();
+        this.pendingCandidatesBySessionId.clear();
     }
 
     private _refreshIceServers(): void {
@@ -115,6 +121,7 @@ export class PeerManager {
 
         try {
             await peer.HandlerOffer({ type: 'offer', sdp: msg.sdp });
+            await this._flushPendingCandidates(msg.sessionId, peer);
         } catch (error) {
             this._onError?.(error);
         }
@@ -132,13 +139,31 @@ export class PeerManager {
     }
 
     private async _handleCandidate(sessionId: string, candidate: RTCIceCandidateInit | null): Promise<void> {
+        if (!candidate) return;
+
         const peer = this.peersBySessionId.get(sessionId);
-        if (!peer || !candidate) return;
+        if (!peer) {
+            const pending = this.pendingCandidatesBySessionId.get(sessionId) ?? [];
+            pending.push(candidate);
+            this.pendingCandidatesBySessionId.set(sessionId, pending);
+            return;
+        }
 
         try {
             await peer.HandleCandidate(candidate);
         } catch (error) {
             this._onError?.(error);
+        }
+    }
+
+    private async _flushPendingCandidates(sessionId: string, peer: Peer): Promise<void> {
+        const pending = this.pendingCandidatesBySessionId.get(sessionId);
+        if (!pending || pending.length === 0) return;
+
+        this.pendingCandidatesBySessionId.delete(sessionId);
+
+        for (const candidate of pending) {
+            await peer.HandleCandidate(candidate);
         }
     }
 }
