@@ -1,5 +1,6 @@
 
 
+import { FileChunker, FileDigester, type ReceivedFile } from "./files";
 import type { IceServerInfo, SignalingConnection } from "./signaling";
 
 export class Peer{
@@ -13,6 +14,7 @@ export class Peer{
     iceServers: IceServerInfo[] = [];
     private pendingCandidates: RTCIceCandidateInit[] = [];
     private lastConnectionState: RTCPeerConnectionState | null = null;
+    
 
     constructor({signaling, peerId, sessionId
     }: {
@@ -114,7 +116,7 @@ export class Peer{
             console.log('Data channel opened');
         }
         dc.onmessage = (event) => {
-            console.log('Data channel message:', event.data);
+            
         }
 
         dc.onclose = ()=>{
@@ -233,6 +235,8 @@ export class Peer{
     }
 
     destroy(){
+        
+
         if (this.dc) {
             this.dc.onopen = null;
             this.dc.onmessage = null;
@@ -253,6 +257,18 @@ export class Peer{
         this.isConnected = false;
         this.lastConnectionState = null;
         this.pendingCandidates = [];
+    }
+
+    private sendData(payload: string | ArrayBuffer): void {
+        if (!this.dc || this.dc.readyState !== 'open') {
+            throw new Error('data channel is not open');
+        }
+        if (typeof payload === 'string') {
+            this.dc.send(payload);
+            return;
+        }
+
+        this.dc.send(new Uint8Array(payload));
     }
 
     private async flushPendingCandidates(): Promise<void> {
@@ -323,3 +339,4 @@ export class Peer{
     }
 
 }
+

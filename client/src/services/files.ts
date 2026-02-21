@@ -133,7 +133,7 @@ export class FileDigester {
 
     readonly done: Promise<ReceivedFile>;
 
-    constructor( meta: FileMeta,  callback?: (file: ReceivedFile) => void) {
+    constructor(private readonly meta: FileMeta, private readonly callback?: (file: ReceivedFile) => void) {
         if (meta.size < 0) {
             throw new Error("meta.size must be >= 0");
         }
@@ -221,3 +221,5 @@ export class FileDigester {
         this.resolveDone(file);
     }
 }
+
+
