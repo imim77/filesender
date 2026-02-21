@@ -357,11 +357,16 @@ class FileTransfer{
     busy = false;
     private chunker:  FileChunker | null = null;
     private digester: FileDigester|null = null;
+    private lastProgress = 0;
+    onFileReceived?: (file: ReceivedFile) => void;
 
     constructor(opts: {
         peerId: string;
+        onFileReceived?: (file: ReceivedFile) => void;
+
     }){
         this.peerId = opts.peerId;
+        this.onFileReceived = opts.onFileReceived
     }
 
     sendFiles(files: FileList | File[]){
@@ -387,10 +392,27 @@ class FileTransfer{
             return;
         }
 
-        switch(parsedMsg.type)
+        switch(parsedMsg.type){
+            case 'header':
+                this.on
+        }
     }
 
-
+    private onFileHeader(header: Extract<TransferMessage, { type: 'header' }>){
+        this.lastProgress = 0;
+        this.digester = new FileDigester({
+            name: header.name,
+            mime: header.mime,
+            size: header.size,
+        },
+        (file) => {
+            this.onFileReceived?.(file);
+            this.sendJSON({type: 'transfer-complete'});
+        })
+        this.digester.done.catch((error) => {
+            console.error('[WebRTC] file digester failed', { peerId: this.peerId, error });
+        })
+    }
 
     private async onChunkRecieved(chunk: ArrayBuffer | Blob){
         if(!this.digester){
@@ -398,7 +420,18 @@ class FileTransfer{
             return;
         }
 
+        const asBuffer = chunk instanceof Blob ? await chunk.arrayBuffer() : chunk;
+        if (!asBuffer.byteLength) {
+            return;
+        }
 
+
+    }
+
+
+
+    private sendJSON(message: TransferMessage): void {
+        this.sendRaw(JSON.stringify(message));
     }
 
 
