@@ -359,14 +359,24 @@ class FileTransfer{
     private digester: FileDigester|null = null;
     private lastProgress = 0;
     onFileReceived?: (file: ReceivedFile) => void;
+    sendRaw: (payload: string | ArrayBuffer) => void;
+    onProgress?: (progress: number) => void;
+    onTransferCompleted?: () => void;
+
 
     constructor(opts: {
         peerId: string;
         onFileReceived?: (file: ReceivedFile) => void;
+        sendRaw: (payload: string | ArrayBuffer) => void;
+        onProgress?: (progress: number) => void;
+        onTransferCompleted?: () => void;
 
     }){
         this.peerId = opts.peerId;
         this.onFileReceived = opts.onFileReceived
+        this.sendRaw = opts.sendRaw;
+        this.onProgress = opts.onProgress;
+        this.onTransferCompleted = opts.onTransferCompleted;
     }
 
     sendFiles(files: FileList | File[]){
@@ -394,8 +404,35 @@ class FileTransfer{
 
         switch(parsedMsg.type){
             case 'header':
-                this.on
+                this.onFileHeader(parsedMsg);
+                return;
+            case 'partition':
+                this.onRecievedPartition(parsedMsg.offset);
+                return;
+            case 'partition-received':
+                this.sendNextPartition();
+                return;
+            case 'progress':
+                this.sendProgress(parsedMsg.progress);
+                return;
+            case 'transfer-complete':
+                return;
+            default:
+                return;
         }
+    }
+
+    private sendProgress(progress: number){
+        this.sendJSON({type: 'progress', progress});
+    }
+
+    private async sendNextPartition(){
+        if(!this.chunker || this.chunker.isFileEnd){return}
+        await this.chunker.nextPartition();
+    }
+
+    private onRecievedPartition(offset: number){
+        this.sendJSON({type: 'partition-received', offset})
     }
 
     private onFileHeader(header: Extract<TransferMessage, { type: 'header' }>){
@@ -425,13 +462,38 @@ class FileTransfer{
             return;
         }
 
+        this.digester.unchunk(asBuffer);
+        const progress = this.digester.progress
+        if (progress - this.lastProgress < 0.01 && progress < 1) {
+            return;
+        }
+        this.onDownloadProgress(progress);
+
+            if (progress - this.lastProgress < 0.01 && progress < 1) {
+                return;
+            }
+
+        this.lastProgress = progress;
+        this.sendProgress(progress);
+
 
     }
 
+    private async onTransferCompletedByPeer(){
+        this.onDownloadProgress(1);
+        this.chunker = null;
+        this.busy = false;
+        this.onTransferCompleted?.();
+        await this.dequeueFile();
+    }
 
 
-    private sendJSON(message: TransferMessage): void {
+    private sendJSON(message: TransferMessage){
         this.sendRaw(JSON.stringify(message));
+    }
+
+    private onDownloadProgress(progress: number){
+        this.onProgress?.(progress);
     }
 
 
