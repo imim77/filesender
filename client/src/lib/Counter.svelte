@@ -13,35 +13,67 @@
   let me: ClientInfo | null = $state(null);
   let peers: ClientInfo[] = $state([]);
   let lastError = $state('');
-  let selectedFiles: FileList | null = null;
   const localAlias = generateName();
+  let selectedPeerId: string | null = null;
+  let fileInput: HTMLInputElement | null = $state(null);
 
-  function onFilesSelected(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    selectedFiles = input.files;
+  function openFilePickerForPeer(peerId: string) {
+    if (!peerManager) {
+      console.warn('[UI] peer manager not ready');
+      selectedPeerId = null;
+      return;
+    }
+
+    if (!peerManager.isPeerConnected(peerId)) {
+      console.warn('[UI] selected peer is not connected:', peerId);
+      return;
+    }
+
+    selectedPeerId = peerId;
+    fileInput?.click();
   }
 
-  function sendSelectedFiles() {
+  function onPeerFileSelected(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const files = input.files;
+
     if (!peerManager) {
       console.warn('[UI] peer manager not ready');
       return;
     }
 
-    if (!selectedFiles || selectedFiles.length === 0) {
+    if (!selectedPeerId) {
+      console.warn('[UI] no target peer selected');
+      input.value = '';
+      selectedPeerId = null;
+      return;
+    }
+
+    if (!files || files.length === 0) {
       console.warn('[UI] no files selected');
+      input.value = '';
+      selectedPeerId = null;
       return;
     }
 
-    const result = peerManager.sendFilesToConnectedPeers(selectedFiles);
-    if (result.peers === 0) {
-      console.warn('[UI] no connected peers to send files to');
+    const result = peerManager.sendFilesToPeer(selectedPeerId, files);
+    if (!result.ok) {
+      console.warn('[UI] failed to send files', {
+        peerId: selectedPeerId,
+        reason: result.reason,
+      });
+      input.value = '';
+      selectedPeerId = null;
       return;
     }
 
-    console.log('[UI] queued files for connected peers', {
+    console.log('[UI] queued files for peer', {
+      peerId: selectedPeerId,
       files: result.files,
-      peers: result.peers,
     });
+
+    input.value = '';
+    selectedPeerId = null;
   }
 
   onMount(() => {
@@ -108,22 +140,19 @@
   {#if peers.length === 0}
     <p>No peers online.</p>
   {:else}
+    <input bind:this={fileInput} type="file" hidden onchange={onPeerFileSelected} />
     <ul>
       {#each peers as peer}
         <li>
           <strong>{peer.alias || 'Anonymous'}</strong>
-          <code>{peer.id}</code> 
+          <code>{peer.id}</code>
+          <button onclick={() => openFilePickerForPeer(peer.id)} disabled={!peerManager?.isPeerConnected(peer.id)}>
+            Send file
+          </button>
         </li>
       {/each}
     </ul>
   {/if}
-</section>
-
-<section>
-  <h2>File Transfer</h2>
-  <p>Connected peers: {peerManager?.getConnectedPeerCount() ?? 0}</p>
-  <input type="file" multiple onchange={onFilesSelected} />
-  <button onclick={sendSelectedFiles}>Send Selected Files</button>
 </section>
 
 {#if lastError}

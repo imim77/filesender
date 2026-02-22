@@ -114,6 +114,10 @@ export class PeerManager {
         return this.getConnectedPeers().length;
     }
 
+    isPeerConnected(peerId: string): boolean {
+        return this._getConnectedPeerById(peerId) !== null;
+    }
+
     getSelf(): ClientInfo | null {
         return this.me;
     }
@@ -122,21 +126,19 @@ export class PeerManager {
         return Array.from(this.knownPeersById.values());
     }
 
-    sendFilesToConnectedPeers(files: FileList | File[]): { peers: number; files: number } {
+    sendFilesToPeer(peerId: string, files: FileList | File[]): { ok: boolean; files: number; reason?: string } {
         const list = Array.isArray(files) ? files : Array.from(files);
         if (list.length === 0) {
-            return { peers: 0, files: 0 };
+            return { ok: false, files: 0, reason: 'no-files' };
         }
 
-        const peers = this.getConnectedPeers();
-        for (const peer of peers) {
-            peer.sendFiles(list);
+        const peer = this._getConnectedPeerById(peerId);
+        if (!peer) {
+            return { ok: false, files: list.length, reason: 'peer-not-connected' };
         }
 
-        return {
-            peers: peers.length,
-            files: list.length,
-        };
+        peer.sendFiles(list);
+        return { ok: true, files: list.length };
     }
 
     destroy(): void {
@@ -175,6 +177,15 @@ export class PeerManager {
             if (peer.peerId === peerId) return true;
         }
         return false;
+    }
+
+    private _getConnectedPeerById(peerId: string): Peer | null {
+        for (const peer of this.peersBySessionId.values()) {
+            if (peer.peerId !== peerId) continue;
+            if (peer.dc?.readyState !== 'open') continue;
+            return peer;
+        }
+        return null;
     }
 
     private _setKnownPeers(peers: ClientInfo[]): void {
