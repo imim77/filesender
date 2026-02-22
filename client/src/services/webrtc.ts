@@ -458,7 +458,7 @@ class FileTransfer {
         this.lastProgress = 0;
     }
 
-    private async dequeueFile(): Promise<void> {
+    private async dequeueFile() {
         const file = this.filesQueue.shift();
         if (!file) {
             this.busy = false;
@@ -469,7 +469,7 @@ class FileTransfer {
         await this.sendFile(file);
     }
 
-    private async sendFile(file: File): Promise<void> {
+    private async sendFile(file: File) {
         this.sendJSON({
             type: 'header',
             name: file.name,
@@ -486,30 +486,30 @@ class FileTransfer {
         await this.chunker.nextPartition();
     }
 
-    private onPartitionEnd(offset: number): void {
+    private onPartitionEnd(offset: number){
         this.sendJSON({ type: 'partition', offset });
     }
 
-    private onReceivedPartitionEnd(offset: number): void {
+    private onReceivedPartitionEnd(offset: number){
         this.sendJSON({ type: 'partition-received', offset });
     }
 
-    private async sendNextPartition(): Promise<void> {
+    private async sendNextPartition() {
         if (!this.chunker || this.chunker.isFileEnd) {
             return;
         }
         await this.chunker.nextPartition();
     }
 
-    private sendProgress(progress: number): void {
+    private sendProgress(progress: number){
         this.sendJSON({ type: 'progress', progress });
     }
 
-    private onDownloadProgress(progress: number): void {
+    private onDownloadProgress(progress: number){
         this.onProgress?.(progress);
     }
 
-    private onFileHeader(header: Extract<TransferMessage, { type: 'header' }>): void {
+    private onFileHeader(header: Extract<TransferMessage, { type: 'header' }>){
         this.lastProgress = 0;
         this.digester?.abort(new Error('new file header arrived before previous file completed'));
         this.digester = new FileDigester({
@@ -528,7 +528,7 @@ class FileTransfer {
             });
     }
 
-    private async onChunkReceived(chunk: ArrayBuffer | Blob): Promise<void> {
+    private async onChunkReceived(chunk: ArrayBuffer | Blob){
         if (!this.digester) {
             console.warn('[WebRTC] received chunk without file header', { peerId: this.peerId });
             return;
@@ -549,7 +549,7 @@ class FileTransfer {
         this.sendProgress(progress);
     }
 
-    private async onTransferCompletedByPeer(): Promise<void> {
+    private async onTransferCompletedByPeer(){
         this.onDownloadProgress(1);
         this.chunker = null;
         this.busy = false;
@@ -557,7 +557,7 @@ class FileTransfer {
         await this.dequeueFile();
     }
 
-    private sendJSON(message: TransferMessage): void {
+    private sendJSON(message: TransferMessage){
         this.sendRaw(JSON.stringify(message));
     }
 }
