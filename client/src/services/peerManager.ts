@@ -1,4 +1,5 @@
 import type {
+    ClientInfo,
     OfferMessage,
     SignalingConnection,
     WsServerMessage,
@@ -9,7 +10,8 @@ export class PeerManager {
     signaling: SignalingConnection;
     peersBySessionId: Map<string, Peer> = new Map();
     pendingCandidatesBySessionId: Map<string, RTCIceCandidateInit[]> = new Map();
-    
+    knownPeersById: Map<string, ClientInfo> = new Map();
+    me: ClientInfo | null = null;
 
     _onPeerCreated?: (peer: Peer) => void;
     _onPeerRemoved?: (peer: Peer) => void;
@@ -55,7 +57,21 @@ export class PeerManager {
         console.log('[PeerManager] handle message', msg.type);
         switch (msg.type) {
             case 'HELLO':
+                this.me = msg.client;
+                this._setKnownPeers(msg.peers);
                 this._refreshIceServers();
+                for (const peer of this.knownPeersById.values()) {
+                    this._startSessionIfNeeded(peer.id, true);
+                }
+                return;
+
+            case 'JOIN':
+                this._upsertKnownPeer(msg.peer);
+                this._startSessionIfNeeded(msg.peer.id, true);
+                return;
+
+            case 'UPDATE':
+                this._upsertKnownPeer(msg.peer);
                 return;
 
             case 'OFFER':
@@ -71,6 +87,7 @@ export class PeerManager {
                 return;
 
             case 'LEFT':
+                this._removeKnownPeer(msg.peerId);
                 this.removePeerByPeerId(msg.peerId);
                 return;
 
@@ -97,6 +114,14 @@ export class PeerManager {
         return this.getConnectedPeers().length;
     }
 
+    getSelf(): ClientInfo | null {
+        return this.me;
+    }
+
+    getPeers(): ClientInfo[] {
+        return Array.from(this.knownPeersById.values());
+    }
+
     sendFilesToConnectedPeers(files: FileList | File[]): { peers: number; files: number } {
         const list = Array.isArray(files) ? files : Array.from(files);
         if (list.length === 0) {
@@ -121,6 +146,51 @@ export class PeerManager {
         }
         this.peersBySessionId.clear();
         this.pendingCandidatesBySessionId.clear();
+        this.knownPeersById.clear();
+        this.me = null;
+    }
+
+    private _startSessionIfNeeded(peerId: string, isAutomatic = false): void {
+        if (isAutomatic && !this._shouldInitiate(peerId)) {
+            console.log('[AUTO CONNECT] skipping (wait for remote offer):', peerId);
+            return;
+        }
+
+        if (this._hasSessionForPeer(peerId)) {
+            console.log('[CONNECT] session already exists:', peerId);
+            return;
+        }
+
+        console.log(isAutomatic ? '[AUTO CONNECT] starting session to:' : '[CONNECT] starting session to:', peerId);
+        this.startSession(peerId);
+    }
+
+    private _shouldInitiate(peerId: string): boolean {
+        if (!this.me) return false;
+        return this.me.id.localeCompare(peerId) < 0;
+    }
+
+    private _hasSessionForPeer(peerId: string): boolean {
+        for (const peer of this.peersBySessionId.values()) {
+            if (peer.peerId === peerId) return true;
+        }
+        return false;
+    }
+
+    private _setKnownPeers(peers: ClientInfo[]): void {
+        this.knownPeersById.clear();
+        for (const peer of peers) {
+            this._upsertKnownPeer(peer);
+        }
+    }
+
+    private _upsertKnownPeer(peer: ClientInfo): void {
+        if (this.me && peer.id === this.me.id) return;
+        this.knownPeersById.set(peer.id, peer);
+    }
+
+    private _removeKnownPeer(peerId: string): void {
+        this.knownPeersById.delete(peerId);
     }
 
     private _refreshIceServers(): void {

@@ -4,9 +4,8 @@
   import {
     SignalingConnection,
     type ClientInfo,
-    type WsServerMessage,
   } from '../services/signaling';
-    import { generateName, getAgentInfo } from '../utilis/uaNames';
+  import { generateName, getAgentInfo } from '../utilis/uaNames';
 
   let signaling: SignalingConnection | null = null;
   let peerManager: PeerManager | null = $state(null);
@@ -15,82 +14,7 @@
   let peers: ClientInfo[] = $state([]);
   let lastError = $state('');
   let selectedFiles: FileList | null = null;
-
-  function shouldInitiate(peerId: string): boolean {
-    if (!me) return false;
-    return me.id.localeCompare(peerId) < 0;
-  }
-
-  function hasSessionForPeer(peerId: string): boolean {
-    if (!peerManager) return false;
-    for (const peer of peerManager.peersBySessionId.values()) {
-      if (peer.peerId === peerId) return true;
-    }
-    return false;
-  }
-
-  function upsertPeer(peer: ClientInfo) {
-    if (me && peer.id === me.id) return;
-
-    const index = peers.findIndex((entry) => entry.id === peer.id);
-    if (index < 0) {
-      peers = [...peers, peer];
-      return;
-    }
-
-    const next = peers.slice();
-    next[index] = peer;
-    peers = next;
-  }
-
-  function removePeer(peerId: string) {
-    peers = peers.filter((peer) => peer.id !== peerId);
-  }
-
-  async function handleServerMessage(msg: WsServerMessage) {
-    console.log('[WS] incoming:', msg.type, msg);
-    await peerManager?.handleMessage(msg);
-
-    switch (msg.type) {
-      case 'HELLO':
-        me = msg.client;
-        peers = msg.peers.filter((peer) => peer.id !== msg.client.id);
-        for (const peer of peers) {
-          connectToPeer(peer.id, true);
-        }
-        break;
-      case 'JOIN':
-        upsertPeer(msg.peer);
-        connectToPeer(msg.peer.id, true);
-        break;
-      case 'UPDATE':
-        upsertPeer(msg.peer);
-        break;
-      case 'LEFT':
-        removePeer(msg.peerId);
-        break;
-      default:
-        break;
-    }
-  }
-
-  function connectToPeer(peerId: string, isAutomatic = false) {
-    if (!peerManager) return;
-
-    if (isAutomatic && !shouldInitiate(peerId)) {
-      console.log('[AUTO CONNECT] skipping (wait for remote offer):', peerId);
-      return;
-    }
-
-    const alreadyConnected = hasSessionForPeer(peerId);
-    if (alreadyConnected) {
-      console.log('[CONNECT] session already exists:', peerId);
-      return;
-    }
-
-    console.log(isAutomatic ? '[AUTO CONNECT] starting session to:' : '[CONNECT] starting session to:', peerId);
-    peerManager.startSession(peerId);
-  }
+  const localAlias = generateName();
 
   function onFilesSelected(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -122,13 +46,16 @@
 
   onMount(() => {
     signaling = new SignalingConnection({
-      info: { alias: generateName(), deviceType: getAgentInfo(navigator.userAgent) },
+      info: { alias: localAlias, deviceType: getAgentInfo(navigator.userAgent) },
       onOpen: () => {
         console.log('[WS] connected to signaling server');
       },
       onMessage: async (msg) => {
         try {
-          await handleServerMessage(msg);
+          console.log('[WS] incoming:', msg.type, msg);
+          await peerManager?.handleMessage(msg);
+          me = peerManager?.getSelf() ?? null;
+          peers = peerManager?.getPeers() ?? [];
         } catch (error) {
           lastError = error instanceof Error ? error.message : String(error);
           console.error('Failed to handle WS message:', error);
@@ -173,7 +100,7 @@
 
 <section>
   <h2>Signaling</h2>
-  <p>Me: {me ? `${me.alias} (${me.id})` : 'Connecting...'}</p>
+  <p>Me: {me ? `${me.alias || localAlias} (${me.id})` : `Connecting as ${localAlias}...`}</p>
 </section>
 
 <section>
@@ -185,7 +112,7 @@
       {#each peers as peer}
         <li>
           <strong>{peer.alias || 'Anonymous'}</strong>
-          <code>{peer.id}</code>
+          <code>{peer.id}</code> 
         </li>
       {/each}
     </ul>
