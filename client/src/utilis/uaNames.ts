@@ -1,9 +1,16 @@
-const arr = ["mimi", "babo"]
+const firstPart = ["Sky", "Star", "Moon", "Fire", "Dark", "Ice", "Neo", "Shadow"];
+const secondPart = ["Walker", "Hunter", "Blade", "Runner", "Storm", "Fang", "Strike", "Flame"];
 
 
 
+export function generateName(){
+    const first = firstPart[Math.floor(Math.random() * firstPart.length)];
+    const second = secondPart[Math.floor(Math.random() * secondPart.length)];
+    return `${first} ${second}`;
+}
 
-function getAgentInfo(userAgent: string){
+
+export function getAgentInfo(userAgent: string){
     const browser = getBrowser(userAgent);
     const os = getOS(userAgent);
     if(browser && os){
@@ -28,7 +35,7 @@ function getBrowser(userAgent: string){
         case userAgent.includes("Edg"):
             return "Edge";
         default:
-            return null;
+            return "Unknown browser";
     }
 }
 

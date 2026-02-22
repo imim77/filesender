@@ -6,6 +6,7 @@
     type ClientInfo,
     type WsServerMessage,
   } from '../services/signaling';
+    import { generateName, getAgentInfo } from '../utilis/uaNames';
 
   let signaling: SignalingConnection | null = null;
   let peerManager: PeerManager | null = $state(null);
@@ -121,7 +122,7 @@
 
   onMount(() => {
     signaling = new SignalingConnection({
-      info: { alias: `Browser-${Math.floor(Math.random() * 1000)}`, deviceType: 'Browser' },
+      info: { alias: generateName(), deviceType: getAgentInfo(navigator.userAgent) },
       onOpen: () => {
         console.log('[WS] connected to signaling server');
       },
@@ -172,7 +173,7 @@
 
 <section>
   <h2>Signaling</h2>
-  <p>Me: {me ? `${me.alias || 'Anonymous'} (${me.id})` : 'Connecting...'}</p>
+  <p>Me: {me ? `${me.alias} (${me.id})` : 'Connecting...'}</p>
 </section>
 
 <section>
