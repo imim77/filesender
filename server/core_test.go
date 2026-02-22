@@ -100,16 +100,21 @@ func TestCoreUnregisterRemovesAndClosesClient(t *testing.T) {
 	}
 }
 
-func TestCoreEnqueueReturnsMailboxFullWithoutReceiver(t *testing.T) {
+func TestCoreEnqueueReturnsCoreClosedWhenReceiverUnavailable(t *testing.T) {
 	core := &Core{
 		MessChan: make(chan coreMessage),
 		clients:  map[uuid.UUID]*Client{},
 		closed:   make(chan struct{}),
 	}
 
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		closeCore(core)
+	}()
+
 	err := core.Enqueue(unregisterMsg{ClientID: uuid.New()})
-	if !errors.Is(err, ErrMailboxFull) {
-		t.Fatalf("expected ErrMailboxFull, got %v", err)
+	if !errors.Is(err, ErrCoreClosed) {
+		t.Fatalf("expected ErrCoreClosed, got %v", err)
 	}
 }
 

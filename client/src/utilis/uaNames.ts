@@ -12,7 +12,7 @@ export function generateName(){
 
 export function getAgentInfo(userAgent: string){
     const browser = getBrowser(userAgent);
-    const os = getOS(userAgent);
+    const os = getDeviceType(userAgent);
     if(browser && os){
         return `${os} | ${browser}`;
     }else if(os){
@@ -22,39 +22,37 @@ export function getAgentInfo(userAgent: string){
     }
 }
 
-function getBrowser(userAgent: string){
+export function getBrowser(userAgent: string){
     switch(true){
         case userAgent.includes("Firefox"):
             return "Firefox";
+        case userAgent.includes("Edg"):
+            return "Edge";
+        case userAgent.includes("Opera") || userAgent.includes("OPR"):
+            return "Opera";
         case userAgent.includes("Chrome"):
             return "Chrome";
         case userAgent.includes("Safari"):
             return "Safari";
-        case userAgent.includes("Opera") || userAgent.includes("OPR"):
-            return "Opera";
-        case userAgent.includes("Edg"):
-            return "Edge";
         default:
             return "Unknown browser";
     }
 }
 
-function getOS(userAgent: string){
+export function getDeviceType(userAgent: string){
     switch(true){
+        case userAgent.includes("iPhone") || userAgent.includes("iPad"):
+            return "iOS";
         case userAgent.includes("Windows"):
             return "Windows";
         case userAgent.includes("Android"):
             return "Android";
         case userAgent.includes("Macintosh"):
             return "macOS";
-        case userAgent.includes("Iphone") || userAgent.includes("iPad"):
-            return "iOS";
-        case userAgent.includes("X11"):
+        case userAgent.includes("Linux") || userAgent.includes("X11"):
             return "Linux";
         default:
-            return null;
+            return "Unknown device";
     }
-    
 }
-
 

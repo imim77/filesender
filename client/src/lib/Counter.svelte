@@ -5,7 +5,7 @@
     SignalingConnection,
     type ClientInfo,
   } from '../services/signaling';
-  import { generateName, getAgentInfo } from '../utilis/uaNames';
+  import { generateName, getBrowser, getDeviceType } from '../utilis/uaNames';
 
   let signaling: SignalingConnection | null = null;
   let peerManager: PeerManager | null = $state(null);
@@ -14,6 +14,9 @@
   let peers: ClientInfo[] = $state([]);
   let lastError = $state('');
   const localAlias = generateName();
+  const localUserAgent = navigator.userAgent;
+  const localBrowser = getBrowser(localUserAgent);
+  const localDevice = getDeviceType(localUserAgent);
   let selectedPeerId: string | null = null;
   let fileInput: HTMLInputElement | null = $state(null);
 
@@ -78,7 +81,11 @@
 
   onMount(() => {
     signaling = new SignalingConnection({
-      info: { alias: localAlias, deviceType: getAgentInfo(navigator.userAgent) },
+      info: {
+        alias: localAlias,
+        deviceType: localDevice,
+        deviceModel: localBrowser,
+      },
       onOpen: () => {
         console.log('[WS] connected to signaling server');
       },
@@ -132,7 +139,7 @@
 
 <section>
   <h2>Signaling</h2>
-  <p>Me: {me ? `${me.alias || localAlias} (${me.id})` : `Connecting as ${localAlias}...`}</p>
+  <p>Me: {me ? `${me.alias || localAlias} — ${me.deviceModel || localBrowser} on ${me.deviceType || localDevice}` : `Connecting as ${localAlias}...`}</p>
 </section>
 
 <section>
@@ -144,8 +151,7 @@
     <ul>
       {#each peers as peer}
         <li>
-          <strong>{peer.alias || 'Anonymous'}</strong>
-          <code>{peer.id}</code>
+          <span>{peer.alias || 'Anonymous'} — {peer.deviceModel || 'Unknown browser'} on {peer.deviceType || 'Unknown device'}</span>
           <button onclick={() => openFilePickerForPeer(peer.id)} disabled={!peerManager?.isPeerConnected(peer.id)}>
             Send file
           </button>

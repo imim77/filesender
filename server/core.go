@@ -18,6 +18,8 @@ var (
 	ErrCoreClosed     = errors.New("core closed")
 )
 
+const coreMailboxSize = 256
+
 type ClientInfoWithoutId struct {
 	Alias       string `json:"alias,omitempty"`
 	DeviceModel string `json:"deviceModel,omitempty"`
@@ -103,7 +105,7 @@ type Core struct {
 
 func NewCore() *Core {
 	c := &Core{
-		MessChan: make(chan coreMessage),
+		MessChan: make(chan coreMessage, coreMailboxSize),
 		clients:  map[uuid.UUID]*Client{},
 		closed:   make(chan struct{}),
 	}
@@ -139,9 +141,6 @@ func (c *Core) Enqueue(msg coreMessage) error {
 		return ErrCoreClosed
 	case c.MessChan <- msg:
 		return nil
-	default:
-		return ErrMailboxFull
-
 	}
 }
 
