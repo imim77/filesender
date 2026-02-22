@@ -512,21 +512,20 @@ class FileTransfer {
     private onFileHeader(header: Extract<TransferMessage, { type: 'header' }>): void {
         this.lastProgress = 0;
         this.digester?.abort(new Error('new file header arrived before previous file completed'));
-        this.digester = new FileDigester(
-            {
-                name: header.name,
-                mime: header.mime,
-                size: header.size,
-            },
-            (file) => {
+        this.digester = new FileDigester({
+            name: header.name,
+            mime: header.mime,
+            size: header.size,
+        });
+
+        this.digester.done
+            .then((file) => {
                 this.onFileReceived?.(file);
                 this.sendJSON({ type: 'transfer-complete' });
-            },
-        );
-
-        this.digester.done.catch((error) => {
+            })
+            .catch((error) => {
             console.error('[WebRTC] file digester failed', { peerId: this.peerId, error });
-        });
+            });
     }
 
     private async onChunkReceived(chunk: ArrayBuffer | Blob): Promise<void> {
