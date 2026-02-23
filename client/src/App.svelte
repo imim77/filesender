@@ -1,23 +1,17 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { WebRTCController } from './services/webrtccontroller.svelte';
-    import { generateName, getAgentInfo } from './utilis/uaNames';
+  import { generateName, getAgentInfo } from './utilis/uaNames';
 
-  const controller = new WebRTCController(generateName(), getAgentInfo(navigator.userAgent));
-
-  function connect(peerId: string): void {
-    controller.connectToPeer(peerId);
-  }
+  const localAlias = generateName();
+  const localDevice = getAgentInfo(navigator.userAgent);
+  const controller = new WebRTCController(localAlias, localDevice);
 
   function sendFiles(peerId: string, event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
     if (!input.files || input.files.length === 0) return;
     controller.sendFiles(peerId, input.files);
     input.value = '';
-  }
-
-  function connectionLabel(peerId: string): string {
-    return controller.peerConnections.get(peerId)?.isConnected ? 'connected' : 'not connected';
   }
 
   onDestroy(() => {
@@ -28,7 +22,7 @@
 <main>
   <h1>FileSender</h1>
   <p>Status: {controller.connectionStatus}</p>
-  <h2>I'am known as {controller.myName}</h2>
+  <h2>I am known as {controller.myName || localAlias}</h2>
   <h2>Peers ({controller.peers.length})</h2>
   {#if controller.peers.length === 0}
     <p>Waiting for peers to join...</p>
@@ -38,12 +32,16 @@
         <li>
           <div>
             <strong>{peer.alias || 'Unnamed device'}</strong>
-            <span>{peer.deviceType || 'Unknown device'}</span>
-            <span>{connectionLabel(peer.id)}</span>
+            <span>{peer.deviceModel || peer.deviceType || 'Unknown device'}</span>
+            <span>{controller.connectionLabel(peer.id)}</span>
           </div>
           <div>
-            <button type="button" on:click={() => connect(peer.id)}>Connect</button>
-            <input type="file" multiple on:change={(event) => sendFiles(peer.id, event)} />
+            <input
+              type="file"
+              multiple
+              disabled={!controller.isPeerConnected(peer.id)}
+              on:change={(event) => sendFiles(peer.id, event)}
+            />
           </div>
         </li>
       {/each}
@@ -98,19 +96,6 @@
     gap: 0.6rem;
     align-items: center;
     flex-wrap: wrap;
-  }
-
-  button {
-    border: 0;
-    border-radius: 8px;
-    padding: 0.5rem 0.8rem;
-    cursor: pointer;
-    background: #1d6f50;
-    color: white;
-  }
-
-  button:hover {
-    background: #15553d;
   }
 
   span {

@@ -17,15 +17,27 @@ export class Peer {
     isConnected = false;
     isCaller = false;
     iceServers: IceServerInfo[] = [];
+    onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
 
     private pendingCandidates: RTCIceCandidateInit[] = [];
     private lastConnectionState: RTCPeerConnectionState | null = null;
     private readonly fileTransfer: FileTransfer;
 
-    constructor({ signaling, peerId, sessionId }: { signaling: SignalingConnection; peerId: string; sessionId: string }) {
+    constructor({
+        signaling,
+        peerId,
+        sessionId,
+        onConnectionStateChange,
+    }: {
+        signaling: SignalingConnection;
+        peerId: string;
+        sessionId: string;
+        onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
+    }) {
         this.signaling = signaling;
         this.peerId = peerId;
         this.sessionId = sessionId;
+        this.onConnectionStateChange = onConnectionStateChange;
 
         this.fileTransfer = new FileTransfer({
             peerId,
@@ -88,6 +100,7 @@ export class Peer {
             if (!state || state === this.lastConnectionState) return;
 
             this.lastConnectionState = state;
+            this.onConnectionStateChange?.(state);
             if (state === 'connected') {
                 this.isConnected = true;
                 console.log('[WebRTC] peer connected', {
@@ -250,6 +263,7 @@ export class Peer {
         this.isConnected = false;
         this.lastConnectionState = null;
         this.pendingCandidates = [];
+        this.onConnectionStateChange?.('closed');
     }
 
     private async createOffer() {
