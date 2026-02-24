@@ -2,6 +2,7 @@
   import { onDestroy } from 'svelte';
   import { WebRTCController } from './services/webrtccontroller.svelte';
   import { generateName, getAgentInfo } from './utilis/uaNames';
+    import Footer from './lib/Footer.svelte';
 
   const localAlias = generateName();
   const localDevice = getAgentInfo(navigator.userAgent);
@@ -46,8 +47,9 @@
         </li>
       {/each}
     </ul>
-  {/if}
+  {/if} 
 </main>
+<Footer/>
 
 <style>
   :global(body) {
