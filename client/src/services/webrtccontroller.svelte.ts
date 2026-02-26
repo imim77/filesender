@@ -40,6 +40,7 @@ export class WebRTCController {
     }
 
     handleSignalingMessage(msg: WsServerMessage): void {
+        console.log(msg)
         switch (msg.type) {
             case 'HELLO':
                 this.myId = msg.client.id;

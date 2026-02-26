@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -15,26 +14,14 @@ import (
 func run(ctx context.Context, stdout, stderr io.Writer) error {
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 	defer cancel()
-	if err := godotenv.Load("server/.env"); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to load server/.env file: %w", err)
-	}
+
 	if err := godotenv.Load(".env"); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to load .env file: %w", err)
 	}
 
-	relayPortMin, _ := strconv.ParseUint(os.Getenv("RELAYPORTMIN"), 10, 16)
-	relayPortMax, _ := strconv.ParseUint(os.Getenv("RELAYPORTMAX"), 10, 16)
-
 	cfg := Config{
-		Host:         os.Getenv("HOST"),
-		Port:         os.Getenv("PORT"),
-		TURNPort:     os.Getenv("TURNPORT"),
-		TURNRealm:    os.Getenv("TURNREALM"),
-		TURNSecret:   os.Getenv("TURNSECRET"),
-		PublicHost:   os.Getenv("PUBLICHOST"),
-		PublicIp:     os.Getenv("PUBLICIP"),
-		RelayPortMin: uint16(relayPortMin),
-		RelayPortMax: uint16(relayPortMax),
+		Host: os.Getenv("HOST"),
+		Port: os.Getenv("PORT"),
 	}
 
 	srv, err := NewServer(&cfg)
