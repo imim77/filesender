@@ -49,7 +49,7 @@ type Core struct {
 	sendToCh   chan Messeger
 }
 
-func newCore() *Core {
+func NewCore() *Core {
 	return &Core{
 		clients:    make(map[uuid.UUID]*Client),
 		broadcast:  make(chan any),

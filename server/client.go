@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -132,23 +131,4 @@ func serveWs(core Core, w http.ResponseWriter, r *http.Request) {
 	go client.writePump()
 	go client.readPump()
 
-}
-
-func parseExternalIceServers(raw string) ([]IceServerInfo, error) {
-	if raw == "" {
-		return nil, nil
-	}
-
-	var servers []IceServerInfo
-	if err := json.Unmarshal([]byte(raw), &servers); err != nil {
-		return nil, err
-	}
-
-	for i, server := range servers {
-		if len(server.URLs) == 0 {
-			return nil, fmt.Errorf("entry %d has empty urls", i)
-		}
-	}
-
-	return servers, nil
 }
