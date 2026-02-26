@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -22,8 +23,8 @@ type UpdateMessage struct {
 }
 
 type LeftMessage struct {
-	Type   string `json:"type"`
-	PeerID string `json:"peerId"`
+	Type   string    `json:"type"`
+	PeerID uuid.UUID `json:"peerId"`
 }
 
 type WsServerSdpMessage struct {
@@ -67,9 +68,45 @@ func (c Core) run() {
 			if _, ok := c.clients[client.info.Id]; ok {
 				delete(c.clients, client.info.Id)
 				close(client.send)
+				if client.conn != nil {
+					fmt.Printf("Delete client %v from the map\n", client.conn.RemoteAddr())
+				}
+
+				leftMessage := LeftMessage{
+					Type:   "LEFT",
+					PeerID: client.info.Id,
+				}
+				for _, peer := range c.clients {
+					select {
+					case peer.send <- leftMessage:
+					default:
+						close(peer.send)
+						delete(c.clients, peer.info.Id)
+					}
+				}
 			}
-			//case message := <-c.broadcast:
-			//case message := <-c.sendToChan:
+		case message := <-c.broadcast:
+			for _, client := range c.clients {
+				select {
+				case client.send <- message:
+				default:
+					close(client.send)
+					delete(c.clients, client.info.Id)
+				}
+			}
+		case dm := <-c.sendToCh:
+			id := dm.getId()
+			msg := dm.getMsg()
+			if client, ok := c.clients[id]; ok {
+				select {
+				case client.send <- msg:
+					fmt.Println(msg)
+					fmt.Printf("sending direct message: %s", msg)
+				default:
+					close(client.send)
+					delete(c.clients, id)
+				}
+			}
 
 		}
 	}
@@ -124,4 +161,17 @@ func (c Core) sendTo(targetId string, msg WsClientMessage, cli *Client) {
 	default:
 		slog.Error("unknown message type", "error", err)
 	}
+}
+
+func (c Core) getPeers(excludeId uuid.UUID) ([]ClientInfo, []*Client) {
+	peers := make([]ClientInfo, len(c.clients))
+	result := make([]*Client, len(c.clients))
+	for id, client := range c.clients {
+		if id == excludeId {
+			continue
+		}
+		peers = append(peers, client.info)
+		result = append(result, client)
+	}
+	return peers, result
 }

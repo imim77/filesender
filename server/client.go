@@ -2,11 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"log/slog"
+	"net/http"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/joho/godotenv"
 )
 
 const (
@@ -14,6 +19,8 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 	writeWait  = 10 * time.Second
 )
+
+var upgarder = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 
 type ErrorMessage struct {
 	Type string `json:"type"`
@@ -33,14 +40,14 @@ type ClientInfo struct {
 }
 
 type Client struct {
-	core *Core
+	core Core
 	conn *websocket.Conn
 	send chan any
 	info ClientInfo
 }
 
-func newClient(connection *websocket.Conn) *Client {
-	return &Client{}
+func newClient(connection *websocket.Conn, core Core) *Client {
+	return &Client{core: core, conn: connection, send: make(chan any, 10)}
 }
 
 func (c Client) readPump() {
@@ -66,7 +73,7 @@ func (c Client) readPump() {
 			}
 		case "OFFER", "ANSWER", "CANDIDATE":
 			if msg.Target != "" {
-				c.conn.sendTo(msg.Target, msg, c)
+				c.core.sendTo(msg.Target, msg, &c)
 			}
 		}
 	}
@@ -94,4 +101,54 @@ func (c Client) writePump() {
 			}
 		}
 	}
+}
+
+func serveWs(core Core, w http.ResponseWriter, r *http.Request) {
+	if err := godotenv.Load(); err != nil {
+		slog.Error("error loading .env file", "error", err)
+	}
+	conn, err := upgarder.Upgrade(w, r, nil)
+	if err != nil {
+		slog.Error("error upgrading a connection", "error", err)
+		return
+	}
+	client := newClient(conn, core)
+	client.info.Id = uuid.New()
+	externalIceServers, err := parseExternalIceServers(os.Getenv("EXTERNAL_ICE_SERVERS_JSON"))
+	peers, peerClients := core.getPeers(client.info.Id)
+	client.send <- HelloMessage{
+		Type:       "HELLO",
+		Client:     client.info,
+		Peers:      peers,
+		IceServers: externalIceServers,
+	}
+
+	for i := range peerClients {
+		peerClients[i].send <- JoinMessage{Type: "JOIN", Peer: client.info}
+	}
+
+	client.core.register <- *client
+
+	go client.writePump()
+	go client.readPump()
+
+}
+
+func parseExternalIceServers(raw string) ([]IceServerInfo, error) {
+	if raw == "" {
+		return nil, nil
+	}
+
+	var servers []IceServerInfo
+	if err := json.Unmarshal([]byte(raw), &servers); err != nil {
+		return nil, err
+	}
+
+	for i, server := range servers {
+		if len(server.URLs) == 0 {
+			return nil, fmt.Errorf("entry %d has empty urls", i)
+		}
+	}
+
+	return servers, nil
 }
