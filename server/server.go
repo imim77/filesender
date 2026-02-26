@@ -29,6 +29,5 @@ type Config struct {
 
 type Server struct {
 	cfg        *Config
-	core       *Core
 	httpServer *http.Server
 }

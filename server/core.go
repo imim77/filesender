@@ -6,18 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type ClientInfoWithoutId struct {
-	Alias       string `json:"alias,omitempty"`
-	DeviceModel string `json:"deviceModel,omitempty"`
-	DeviceType  string `json:"deviceType,omitempty"`
-	Token       string `json:"token,omitempty"`
-}
-
-type ClientInfo struct {
-	Id uuid.UUID `json:"id"`
-	ClientInfoWithoutId
-}
-
 type WsClientMessage struct {
 	Type      string               `json:"type"`
 	SessionID string               `json:"sessionId,omitempty"`
@@ -49,4 +37,36 @@ type WsServerCandidateMessage struct {
 	Peer      ClientInfo      `json:"peer"`
 	SessionID string          `json:"sessionId"`
 	Candidate json.RawMessage `json:"candidate"`
+}
+
+type Core struct {
+	clients    map[uuid.UUID]*Client
+	broadcast  chan any
+	register   chan Client
+	unregister chan Client
+}
+
+func newCore() *Core {
+	return &Core{
+		clients:    make(map[uuid.UUID]*Client),
+		broadcast:  make(chan any),
+		register:   make(chan Client),
+		unregister: make(chan Client),
+	}
+}
+
+func (c Core) run() {
+	for {
+		select {
+		case client := <-c.register:
+			c.clients[client.info.Id] = &client
+		case client := <-c.unregister:
+			if _, ok := c.clients[client.info.Id]; ok {
+				delete(c.clients, client.info.Id)
+				close(client.send)
+			}
+		case message := <-c.broadcast:
+
+		}
+	}
 }

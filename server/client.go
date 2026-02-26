@@ -1,7 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"log"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -15,5 +20,54 @@ type ErrorMessage struct {
 	Code int    `json:"code"`
 }
 
+type ClientInfoWithoutId struct {
+	Alias       string `json:"alias,omitempty"`
+	DeviceModel string `json:"deviceModel,omitempty"`
+	DeviceType  string `json:"deviceType,omitempty"`
+	Token       string `json:"token,omitempty"`
+}
+
+type ClientInfo struct {
+	Id uuid.UUID `json:"id"`
+	ClientInfoWithoutId
+}
+
 type Client struct {
+	core *Core
+	conn *websocket.Conn
+	send chan any
+	info ClientInfo
+}
+
+func newClient(connection *websocket.Conn) *Client {
+	return &Client{}
+}
+
+func (c Client) readPump() {
+	for {
+		_, message, err := c.conn.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("error: %v", err)
+			}
+			return
+		}
+		var msg WsClientMessage
+		if err := json.Unmarshal(message, &msg); err != nil {
+			log.Printf("[%s] invalid JSON: %v", c.conn.RemoteAddr(), err)
+			continue
+		}
+		switch msg.Type {
+		case "UPDATE":
+			if msg.Info != nil {
+				c.info.ClientInfoWithoutId = *msg.Info
+				c.core.register <- c
+				c.core.broadcast <- UpdateMessage{Type: "UPDATE", Peer: c.info}
+			}
+		case "OFFER", "ANSWER", "CANDIDATE":
+			if msg.Target != "" {
+				c.conn.sendTo(msg.Target, msg, c)
+			}
+		}
+	}
 }
