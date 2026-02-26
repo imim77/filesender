@@ -32,8 +32,9 @@ func run(ctx context.Context, stdout, stderr io.Writer) error {
 		ExternalIceServers: externalIceServers,
 	}
 	core := NewCore()
+	go core.run()
 	wsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		serveWs(*core, w, r)
+		serveWs(core, w, r)
 	})
 
 	srv := NewServer(cfg, wsHandler)

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/google/uuid"
 )
@@ -43,9 +44,10 @@ type WsServerCandidateMessage struct {
 
 type Core struct {
 	clients    map[uuid.UUID]*Client
+	mu         sync.RWMutex
 	broadcast  chan any
-	register   chan Client
-	unregister chan Client
+	register   chan *Client
+	unregister chan *Client
 	sendToCh   chan Messeger
 }
 
@@ -53,18 +55,21 @@ func NewCore() *Core {
 	return &Core{
 		clients:    make(map[uuid.UUID]*Client),
 		broadcast:  make(chan any),
-		register:   make(chan Client),
-		unregister: make(chan Client),
+		register:   make(chan *Client),
+		unregister: make(chan *Client),
 		sendToCh:   make(chan Messeger),
 	}
 }
 
-func (c Core) run() {
+func (c *Core) run() {
 	for {
 		select {
 		case client := <-c.register:
-			c.clients[client.info.Id] = &client
+			c.mu.Lock()
+			c.clients[client.info.Id] = client
+			c.mu.Unlock()
 		case client := <-c.unregister:
+			c.mu.Lock()
 			if _, ok := c.clients[client.info.Id]; ok {
 				delete(c.clients, client.info.Id)
 				close(client.send)
@@ -85,7 +90,9 @@ func (c Core) run() {
 					}
 				}
 			}
+			c.mu.Unlock()
 		case message := <-c.broadcast:
+			c.mu.Lock()
 			for _, client := range c.clients {
 				select {
 				case client.send <- message:
@@ -94,9 +101,11 @@ func (c Core) run() {
 					delete(c.clients, client.info.Id)
 				}
 			}
+			c.mu.Unlock()
 		case dm := <-c.sendToCh:
 			id := dm.getId()
 			msg := dm.getMsg()
+			c.mu.Lock()
 			if client, ok := c.clients[id]; ok {
 				select {
 				case client.send <- msg:
@@ -107,6 +116,7 @@ func (c Core) run() {
 					delete(c.clients, id)
 				}
 			}
+			c.mu.Unlock()
 
 		}
 	}
@@ -143,7 +153,7 @@ func (t targetWsServerCandidateMessage) getMsg() any {
 	return t.message
 }
 
-func (c Core) sendTo(targetId string, msg WsClientMessage, cli *Client) {
+func (c *Core) sendTo(targetId string, msg WsClientMessage, cli *Client) {
 	id, err := uuid.Parse(targetId)
 	if err != nil {
 		slog.Error("error while parsing targetId", "error", err)
@@ -163,9 +173,12 @@ func (c Core) sendTo(targetId string, msg WsClientMessage, cli *Client) {
 	}
 }
 
-func (c Core) getPeers(excludeId uuid.UUID) ([]ClientInfo, []*Client) {
-	peers := make([]ClientInfo, len(c.clients))
-	result := make([]*Client, len(c.clients))
+func (c *Core) getPeers(excludeId uuid.UUID) ([]ClientInfo, []*Client) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	peers := make([]ClientInfo, 0, len(c.clients))
+	result := make([]*Client, 0, len(c.clients))
 	for id, client := range c.clients {
 		if id == excludeId {
 			continue

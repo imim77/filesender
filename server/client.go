@@ -39,17 +39,21 @@ type ClientInfo struct {
 }
 
 type Client struct {
-	core Core
+	core *Core
 	conn *websocket.Conn
 	send chan any
 	info ClientInfo
 }
 
-func newClient(connection *websocket.Conn, core Core) *Client {
-	return &Client{core: core, conn: connection, send: make(chan any, 10)}
+func newClient(connection *websocket.Conn, core *Core) *Client {
+	return &Client{core: core, conn: connection, send: make(chan any, 256)}
 }
 
-func (c Client) readPump() {
+func (c *Client) readPump() {
+	defer func() {
+		c.core.unregister <- c
+	}()
+
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
@@ -67,18 +71,17 @@ func (c Client) readPump() {
 		case "UPDATE":
 			if msg.Info != nil {
 				c.info.ClientInfoWithoutId = *msg.Info
-				c.core.register <- c
 				c.core.broadcast <- UpdateMessage{Type: "UPDATE", Peer: c.info}
 			}
 		case "OFFER", "ANSWER", "CANDIDATE":
 			if msg.Target != "" {
-				c.core.sendTo(msg.Target, msg, &c)
+				c.core.sendTo(msg.Target, msg, c)
 			}
 		}
 	}
 }
 
-func (c Client) writePump() {
+func (c *Client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
@@ -91,7 +94,10 @@ func (c Client) writePump() {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
-			c.conn.WriteJSON(message)
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteJSON(message); err != nil {
+				return
+			}
 
 		case <-ticker.C:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
@@ -102,7 +108,7 @@ func (c Client) writePump() {
 	}
 }
 
-func serveWs(core Core, w http.ResponseWriter, r *http.Request) {
+func serveWs(core *Core, w http.ResponseWriter, r *http.Request) {
 	if err := godotenv.Load(); err != nil {
 		slog.Error("error loading .env file", "error", err)
 	}
@@ -114,19 +120,20 @@ func serveWs(core Core, w http.ResponseWriter, r *http.Request) {
 	client := newClient(conn, core)
 	client.info.Id = uuid.New()
 	externalIceServers, err := parseExternalIceServers(os.Getenv("EXTERNAL_ICE_SERVERS_JSON"))
-	peers, peerClients := core.getPeers(client.info.Id)
+	if err != nil {
+		slog.Error("invalid EXTERNAL_ICE_SERVERS_JSON", "error", err)
+		externalIceServers = nil
+	}
+
+	client.core.register <- client
+	peers, _ := core.getPeers(client.info.Id)
 	client.send <- HelloMessage{
 		Type:       "HELLO",
 		Client:     client.info,
 		Peers:      peers,
 		IceServers: externalIceServers,
 	}
-
-	for i := range peerClients {
-		peerClients[i].send <- JoinMessage{Type: "JOIN", Peer: client.info}
-	}
-
-	client.core.register <- *client
+	client.core.broadcast <- JoinMessage{Type: "JOIN", Peer: client.info}
 
 	go client.writePump()
 	go client.readPump()
