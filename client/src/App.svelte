@@ -5,6 +5,8 @@
 	import { generateName, getAgentInfo } from './utilis/uaNames';
 	import Footer from './lib/Footer.svelte';
 	import { Button } from "$lib/components/ui/button/index.js";
+	import Navigation from '$lib/components/Navigation.svelte';
+	import slika from './assets/svelte.svg'
 
 	const localAlias = generateName();
 	const localDevice = getAgentInfo(navigator.userAgent);
@@ -25,6 +27,7 @@
 </script>
 
 <main>
+	<Navigation logoSrc={slika} />
 	<Button>Click me</Button>
 	<h1>FileSender</h1>
 	<p>Status: {controller.connectionStatus}</p>
@@ -59,63 +62,4 @@
 
 <Footer />
 
-<style>
-	:global(body) {
-		margin: 0;
-		font-family: 'Avenir Next', 'Segoe UI', sans-serif;
-		background: linear-gradient(160deg, #f2f7f5 0%, #dfeee8 100%);
-		color: #1a2a23;
-	}
 
-	main {
-		max-width: 760px;
-		margin: 0 auto;
-		padding: 2rem 1rem 3rem;
-	}
-
-	h1 {
-		margin: 0 0 0.5rem;
-	}
-
-	h2 {
-		margin-top: 2rem;
-	}
-
-	ul {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-		display: grid;
-		gap: 0.75rem;
-	}
-
-	li {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: 1rem;
-		padding: 0.75rem;
-		border: 1px solid #b8d1c4;
-		border-radius: 10px;
-		background: #ffffffcc;
-		flex-wrap: wrap;
-	}
-
-	li div {
-		display: flex;
-		gap: 0.6rem;
-		align-items: center;
-		flex-wrap: wrap;
-	}
-
-	span {
-		font-size: 0.85rem;
-		opacity: 0.8;
-	}
-
-	@media (max-width: 720px) {
-		li {
-			align-items: flex-start;
-		}
-	}
-</style>
