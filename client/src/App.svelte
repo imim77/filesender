@@ -1,12 +1,15 @@
 <script lang="ts">
 	import './app.css';
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy } from 'svelte';
 	import { WebRTCController } from './services/webrtccontroller.svelte';
 	import { generateName, getAgentInfo } from './utilis/uaNames';
 	import Footer from './lib/Footer.svelte';
+	import Hero from '$lib/components/Hero.svelte';
 	import { Button } from "$lib/components/ui/button/index.js";
 	import Navigation from '$lib/components/Navigation.svelte';
-	import slika from './assets/svelte.svg'
+	import slika from './assets/svelte.svg';
+	import helloImage from './assets/doghello.png'
+	import imageHello from './assets/hellodog.png'
 
 	const localAlias = generateName();
 	const localDevice = getAgentInfo(navigator.userAgent);
@@ -26,12 +29,13 @@
 	});
 </script>
 
+<Navigation logoSrc={slika} />
+
+<Hero alias={controller.myName || localAlias} animationSrc={imageHello} />
+
 <main>
-	<Navigation logoSrc={slika} />
 	<Button>Click me</Button>
-	<h1>FileSender</h1>
 	<p>Status: {controller.connectionStatus}</p>
-	<h2>I am known as {controller.myName || localAlias}</h2>
 	<h2>Peers ({controller.peers.length})</h2>
 
 	{#if controller.peers.length === 0}
@@ -61,5 +65,4 @@
 </main>
 
 <Footer />
-
 
