@@ -5,23 +5,17 @@
 	import { generateName, getAgentInfo } from './utilis/uaNames';
 	import Footer from './lib/Footer.svelte';
 	import Hero from '$lib/components/Hero.svelte';
-	import { Button } from "$lib/components/ui/button/index.js";
 	import Navigation from '$lib/components/Navigation.svelte';
 	import slika from './assets/svelte.svg';
-	import helloImage from './assets/doghello.png'
 	import imageHello from './assets/hellodog.png'
+    import Something from '$lib/components/something.svelte';
 
 	const localAlias = generateName();
 	const localDevice = getAgentInfo(navigator.userAgent);
 	const controller = new WebRTCController(localAlias, localDevice);
 
-	function sendFiles(peerId: string, event: Event): void {
-		const input = event.currentTarget as HTMLInputElement;
-
-		if (!input.files || input.files.length === 0) return;
-
-		controller.sendFiles(peerId, input.files);
-		input.value = '';
+	function sendFiles(peerId: string, files: FileList): void {
+		controller.sendFiles(peerId, files);
 	}
 
 	onDestroy(() => {
@@ -31,38 +25,14 @@
 
 <Navigation logoSrc={slika} />
 
-<Hero alias={controller.myName || localAlias} animationSrc={imageHello} />
+<Hero
+	alias={controller.myName || localAlias}
+	animationSrc={imageHello}
+	peers={controller.peers.filter((peer) => controller.isPeerConnected(peer.id))}
+	connectionStatus={controller.connectionStatus}
+	connectionLabel={(peerId) => controller.connectionLabel(peerId)}
+	onSendFiles={sendFiles}
+/>
 
-<main>
-	<Button>Click me</Button>
-	<p>Status: {controller.connectionStatus}</p>
-	<h2>Peers ({controller.peers.length})</h2>
 
-	{#if controller.peers.length === 0}
-		<p>Waiting for peers to join...</p>
-	{:else}
-		<ul>
-			{#each controller.peers as peer}
-				<li>
-					<div>
-						<strong>{peer.alias || 'Unnamed device'}</strong>
-						<span>{peer.deviceModel || peer.deviceType || 'Unknown device'}</span>
-						<span>{controller.connectionLabel(peer.id)}</span>
-					</div>
-
-					<div>
-						<input
-							type="file"
-							multiple
-							disabled={!controller.isPeerConnected(peer.id)}
-							on:change={(event) => sendFiles(peer.id, event)}
-						/>
-					</div>
-				</li>
-			{/each}
-		</ul>
-	{/if}
-</main>
-
-<Footer />
 

@@ -9,7 +9,7 @@
 
 <header
 	data-slot="navigation"
-	class={cn("sticky top-0 z-50 w-full border-b border-border bg-background", className)}
+	class={cn("sticky top-0 z-50 w-full  bg-background", className)}
 >
 	<nav class="flex w-full items-center justify-start px-6 py-4">
 		<div class="flex items-center gap-6">
