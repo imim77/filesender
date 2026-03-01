@@ -113,7 +113,7 @@ export class SignalingConnection {
         //const port = '9000';
         //return `${protocol}://${location.hostname}:${port}/ws`;
         const signalingUrl = import.meta.env.VITE_SIGNALING_URL;
-        console.log(signalingUrl)
+        console.log("signaling url is: ", signalingUrl)
         return signalingUrl;
 
     }
