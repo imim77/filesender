@@ -14,7 +14,9 @@
 	<nav class="flex w-full items-center justify-start px-6 py-4">
 		<div class="flex items-center gap-6">
 			{#if logoSrc}
-				<img src={logoSrc} alt={logoAlt} class="h-10" />
+				<a href="https://github.com/imim77/filesender" target="_blank" rel="noopener noreferrer" class="focus-visible:ring-ring/50 rounded-sm outline-none transition-colors focus-visible:ring-[3px]">
+					<img src={logoSrc} alt={logoAlt} class="h-12" />
+				</a>
 			{/if}
 			<a
 				href={aboutHref}
