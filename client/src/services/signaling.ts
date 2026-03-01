@@ -107,11 +107,15 @@ export class SignalingConnection {
         this._reconnectTimer = setTimeout(() => this._connect(), 5000);
     }
 
+    //TODO: change this to something acceptable :)
     private get _endpoint(){
-        const protocol = location.protocol.startsWith('https') ? 'wss' : 'ws';
-        const port = '9000';
-        return `${protocol}://${location.hostname}:${port}/ws`;
-        //return "https://apigotesting.onrender.com/ws"
+        //const protocol = location.protocol.startsWith('https') ? 'wss' : 'ws';
+        //const port = '9000';
+        //return `${protocol}://${location.hostname}:${port}/ws`;
+        const signalingUrl = import.meta.env.VITE_SIGNALING_URL;
+        console.log(signalingUrl)
+        return signalingUrl;
+
     }
 
     private _isConnected(){
