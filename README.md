@@ -3,7 +3,7 @@
 Inspired by Apple's AirDrop, FileSender is a peer-to-peer file sharing application that enables direct file transfers between browsers using WebRTC data channels, with a Go-based WebSocket signaling server.
 
 ### Planned Features
-- Enhanced security (authentication, encryption, access controls)
+- Enhanced security
 - Docker support for easy deployment
 - UI overhaul
 
