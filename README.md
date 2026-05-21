@@ -10,3 +10,4 @@ Inspired by Apple's AirDrop, FileSender is a peer-to-peer file sharing applicati
 ### Server (Go)
 A WebSocket signaling server that facilitates peer discovery and WebRTC handshake exchange (SDP offers/answers and ICE candidates). The server does **not** handle file transfers - all data goes directly between peers via WebRTC.
 
+<img width="1714" height="900" alt="filesenderimg1" src="https://github.com/user-attachments/assets/ec377e4c-005b-46e1-8634-a5cfe381ad0f" />
