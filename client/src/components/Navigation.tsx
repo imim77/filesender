@@ -12,9 +12,9 @@ export default function Navigation({
   className = '',
 }: NavigationProps) {
   return (
-    <header data-slot="navigation" className={`sticky top-0 z-50 w-full bg-background ${className}`.trim()}>
-      <nav className="flex w-full items-center justify-start px-6 py-4">
-        <div className="flex items-center gap-6">
+    <header data-slot="navigation" className={`shrink-0 border-b bg-background ${className}`.trim()}>
+      <nav className="flex w-full items-center justify-between gap-4 px-4 py-3 md:px-6">
+        <div className="flex min-w-0 items-center gap-3">
           {logoSrc ? (
             <a
               href="https://github.com/imim77/filesender"
@@ -22,16 +22,17 @@ export default function Navigation({
               rel="noopener noreferrer"
               className="rounded-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50"
             >
-              <img src={logoSrc} alt={logoAlt} className="h-12" />
+              <img src={logoSrc} alt={logoAlt} className="h-8" />
             </a>
           ) : null}
+          <span className="truncate text-sm font-semibold">Filesender</span>
+        </div>
           <a
             href={aboutHref}
-            className="rounded-sm text-base font-medium text-foreground outline-none transition-colors hover:text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="shrink-0 rounded-sm text-sm font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
           >
             About project
           </a>
-        </div>
       </nav>
     </header>
   );

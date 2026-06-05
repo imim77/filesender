@@ -1,8 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import githubLogo from './assets/githublogo.svg';
-import Footer from './components/Footer';
-import Hero from './components/Hero';
 import Navigation from './components/Navigation';
+import QuickShareLayout from './components/QuickShareLayout';
 import { useWebRTCController } from './hooks/useWebRTCController';
 import { WebRTCController } from './services/webrtccontroller';
 import { generateName, getAgentInfo } from './utilis/uaNames';
@@ -18,17 +17,21 @@ export default function App() {
   }, [controller]);
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex h-dvh min-h-0 flex-col bg-muted/30">
       <Navigation logoSrc={githubLogo} />
-      <Hero
-        alias={state.myName || localAlias}
-        peers={state.peers}
-        connectionStatus={state.connectionStatus}
-        connectionLabel={(peerId) => controller.connectionLabel(peerId)}
-        onSendFiles={(peerId, files) => controller.sendFiles(peerId, files)}
-      />
-      <div className="mt-auto">
-        <Footer />
+      <div className="flex flex-1 overflow-hidden p-4 md:p-6">
+        <div className="flex w-full flex-col overflow-hidden rounded-xl border bg-background shadow-sm">
+          <QuickShareLayout
+            alias={state.myName || localAlias}
+            browserPeer={localDevice}
+            peers={state.peers}
+            connectionStatus={state.connectionStatus}
+            peerConnectionState={Object.fromEntries(
+              state.peers.map((peer) => [peer.id, controller.connectionLabel(peer.id)])
+            )}
+            onSendFiles={(peerId, files) => controller.sendFiles(peerId, files)}
+          />
+        </div>
       </div>
     </div>
   );
